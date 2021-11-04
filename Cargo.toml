@@ -1,9 +1,12 @@
 [package]
 name = "sim7000"
 version = "0.1.0"
-edition = "2021"
+authors = ["Zoey Riordan <zoey@dos.cafe>"]
+description = "Drivers for the SIM7000 series of chips"
+license = "Apache-2.0 OR MIT"
+repository = "https://github.com/technocreatives/sim7000"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+edition = "2021"
 
 [dependencies]
 embedded-time = "0.12"
