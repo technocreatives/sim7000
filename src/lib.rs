@@ -6,7 +6,8 @@ use commands::{AtExecute, AtRead, AtWrite};
 pub mod commands;
 pub mod tcp_client;
 
-pub enum Error<S> {
+#[derive(Debug)]
+pub enum Error<S: core::fmt::Debug> {
     DecodingFailed,
     SerialError(S),
     Timeout,
@@ -14,14 +15,14 @@ pub enum Error<S> {
     ConnectFailed
 }
 
-impl<S> From<S> for Error<S> {
+impl<S: core::fmt::Debug> From<S> for Error<S> {
     fn from(value: S) -> Self {
         Error::SerialError(value)
     }
 }
 
 pub trait Serial {
-    type SerialError;
+    type SerialError: core::fmt::Debug;
 }
 pub trait SerialReadTimeout: Serial {
     fn read_exact(&mut self, buf: &mut [u8], timeout: Milliseconds) -> Result<Option<()>, Self::SerialError>;
