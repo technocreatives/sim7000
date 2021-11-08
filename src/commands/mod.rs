@@ -1,4 +1,4 @@
-use crate::{Error, SerialReadTimeout, SerialWrite, drain_relay};
+use crate::{drain_relay, Error, SerialReadTimeout, SerialWrite};
 use embedded_time::duration::Milliseconds;
 
 mod at;
@@ -168,17 +168,24 @@ pub trait AtExecute: AtCommand {
 }
 
 pub trait AtEncode {
-    fn encode<B: SerialWrite>(&self, encoder: &mut Encoder<B>) -> Result<(), Error<B::SerialError>>;
+    fn encode<B: SerialWrite>(&self, encoder: &mut Encoder<B>)
+        -> Result<(), Error<B::SerialError>>;
 }
 
 impl<'a> AtEncode for &'a [u8] {
-    fn encode<B: SerialWrite>(&self, encoder: &mut Encoder<B>) -> Result<(), Error<B::SerialError>> {
+    fn encode<B: SerialWrite>(
+        &self,
+        encoder: &mut Encoder<B>,
+    ) -> Result<(), Error<B::SerialError>> {
         encoder.encode_bytes(self)
     }
 }
 
 impl AtEncode for i32 {
-    fn encode<B: SerialWrite>(&self, encoder: &mut Encoder<B>) -> Result<(), Error<B::SerialError>> {
+    fn encode<B: SerialWrite>(
+        &self,
+        encoder: &mut Encoder<B>,
+    ) -> Result<(), Error<B::SerialError>> {
         encoder.encode_scalar(*self)
     }
 }

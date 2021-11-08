@@ -17,7 +17,10 @@ pub struct TcpConnectionParams {
 }
 
 impl AtEncode for TcpConnectionParams {
-    fn encode<B: SerialWrite>(&self, encoder: &mut Encoder<B>) -> Result<(), Error<B::SerialError>> {
+    fn encode<B: SerialWrite>(
+        &self,
+        encoder: &mut Encoder<B>,
+    ) -> Result<(), Error<B::SerialError>> {
         encoder.encode_str("\"")?;
         encoder.encode_str(self.mode)?;
         encoder.encode_str("\",\"")?;

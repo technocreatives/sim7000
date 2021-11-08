@@ -23,7 +23,10 @@ pub struct FlowControl {
 }
 
 impl AtEncode for FlowControl {
-    fn encode<B: SerialWrite>(&self, encoder: &mut Encoder<B>) -> Result<(), Error<B::SerialError>> {
+    fn encode<B: SerialWrite>(
+        &self,
+        encoder: &mut Encoder<B>,
+    ) -> Result<(), Error<B::SerialError>> {
         encoder.encode_scalar(self.te_flow as i32)?;
         encoder.encode_str(",")?;
         encoder.encode_scalar(self.ta_flow as i32)

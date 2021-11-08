@@ -45,16 +45,15 @@ impl TcpClient {
         T: AtModem,
     {
         self.disconnect(modem, timeout)?;
-        let result = commands::Cipstart
-            .write(
-                commands::TcpConnectionParams {
-                    mode: "TCP",
-                    host,
-                    port,
-                },
-                modem,
-                timeout.unwrap_or(self.write_timeout),
-            )?;
+        let result = commands::Cipstart.write(
+            commands::TcpConnectionParams {
+                mode: "TCP",
+                host,
+                port,
+            },
+            modem,
+            timeout.unwrap_or(self.write_timeout),
+        )?;
 
         if result == ConnectionResult::Failure {
             return Err(Error::ConnectFailed);
@@ -71,8 +70,7 @@ impl TcpClient {
         T: AtModem,
     {
         let cmd = commands::Cipshut;
-        modem
-            .execute(cmd, timeout.unwrap_or(self.write_timeout))?;
+        modem.execute(cmd, timeout.unwrap_or(self.write_timeout))?;
         Ok(())
     }
 
@@ -91,7 +89,11 @@ impl TcpClient {
         Ok(())
     }
 
-    pub fn receive<T>(&mut self, modem: &mut T, data: &mut [u8]) -> Result<usize, Error<T::SerialError>>
+    pub fn receive<T>(
+        &mut self,
+        modem: &mut T,
+        data: &mut [u8],
+    ) -> Result<usize, Error<T::SerialError>>
     where
         T: AtModem,
     {
@@ -106,7 +108,11 @@ impl TcpClient {
         }
     }
 
-    pub fn try_receive<T>(&mut self, modem: &mut T, data: &mut [u8]) -> Result<usize, Error<T::SerialError>>
+    pub fn try_receive<T>(
+        &mut self,
+        modem: &mut T,
+        data: &mut [u8],
+    ) -> Result<usize, Error<T::SerialError>>
     where
         T: AtModem,
     {

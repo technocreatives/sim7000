@@ -1,6 +1,6 @@
 use embedded_time::duration::Milliseconds;
 
-use crate::{SerialReadTimeout, Error, SerialWrite, drain_relay};
+use crate::{drain_relay, Error, SerialReadTimeout, SerialWrite};
 
 use super::{AtCommand, AtDecode, AtEncode, AtWrite, Decoder, Encoder};
 
@@ -73,7 +73,10 @@ impl AtDecode for NetworkReceiveResponse {
 }
 
 impl AtEncode for NetworkReceiveMode {
-    fn encode<B: SerialWrite>(&self, encoder: &mut Encoder<B>) -> Result<(), Error<B::SerialError>> {
+    fn encode<B: SerialWrite>(
+        &self,
+        encoder: &mut Encoder<B>,
+    ) -> Result<(), Error<B::SerialError>> {
         match self {
             NetworkReceiveMode::Disable => {
                 encoder.encode_scalar(0)?;

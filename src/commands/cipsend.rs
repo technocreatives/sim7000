@@ -1,5 +1,5 @@
-use embedded_time::duration::Milliseconds;
 use crate::{Error, SerialReadTimeout, SerialWrite};
+use embedded_time::duration::Milliseconds;
 
 use super::{AtCommand, AtDecode, AtEncode, AtWrite, Decoder, Encoder};
 
@@ -34,9 +34,7 @@ impl<'a> AtWrite<'a> for Cipsend {
     type Input = &'a [u8];
     type Output = SendResult;
 
-    fn write<
-        B: SerialReadTimeout + SerialWrite,
-    >(
+    fn write<B: SerialReadTimeout + SerialWrite>(
         &self,
         parameter: Self::Input,
         serial: &mut B,

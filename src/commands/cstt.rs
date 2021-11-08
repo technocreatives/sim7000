@@ -16,7 +16,10 @@ pub struct CsttParams {
 }
 
 impl AtEncode for CsttParams {
-    fn encode<B: SerialWrite>(&self, encoder: &mut Encoder<B>) -> Result<(), Error<B::SerialError>> {
+    fn encode<B: SerialWrite>(
+        &self,
+        encoder: &mut Encoder<B>,
+    ) -> Result<(), Error<B::SerialError>> {
         encoder.encode_str("\"")?;
         encoder.encode_str(self.apn)?;
         encoder.encode_str("\",\"")?;

@@ -1,7 +1,7 @@
 #![no_std]
 
-use embedded_time::duration::Milliseconds;
 use commands::{AtExecute, AtRead, AtWrite};
+use embedded_time::duration::Milliseconds;
 
 pub mod commands;
 pub mod tcp_client;
@@ -12,7 +12,7 @@ pub enum Error<S: core::fmt::Debug> {
     SerialError(S),
     Timeout,
     BufferOverflow,
-    ConnectFailed
+    ConnectFailed,
 }
 
 impl<S: core::fmt::Debug> From<S> for Error<S> {
@@ -25,7 +25,11 @@ pub trait Serial {
     type SerialError: core::fmt::Debug;
 }
 pub trait SerialReadTimeout: Serial {
-    fn read_exact(&mut self, buf: &mut [u8], timeout: Milliseconds) -> Result<Option<()>, Self::SerialError>;
+    fn read_exact(
+        &mut self,
+        buf: &mut [u8],
+        timeout: Milliseconds,
+    ) -> Result<Option<()>, Self::SerialError>;
 
     fn read_line<'a>(
         &mut self,
@@ -39,7 +43,11 @@ pub trait SerialWrite: Serial {
 }
 
 pub trait AtModem: SerialWrite + SerialReadTimeout {
-    fn read<C: AtRead>(&mut self, command: C, timeout: Milliseconds) -> Result<C::Output, Error<Self::SerialError>>;
+    fn read<C: AtRead>(
+        &mut self,
+        command: C,
+        timeout: Milliseconds,
+    ) -> Result<C::Output, Error<Self::SerialError>>;
 
     fn write<'a, C: AtWrite<'a>>(
         &mut self,

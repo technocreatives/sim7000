@@ -17,7 +17,10 @@ pub enum BandMode {
 }
 
 impl AtEncode for BandMode {
-    fn encode<B: SerialWrite>(&self, encoder: &mut Encoder<B>) -> Result<(), Error<B::SerialError>> {
+    fn encode<B: SerialWrite>(
+        &self,
+        encoder: &mut Encoder<B>,
+    ) -> Result<(), Error<B::SerialError>> {
         encoder.encode_scalar(*self as i32)
     }
 }
