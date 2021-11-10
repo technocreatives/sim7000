@@ -29,6 +29,9 @@ pub enum GnssResponse {
         speed_over_ground: f32,
         course_over_ground: f32,
         sat_gps_view: u32,
+        sat_gnss_used: u32,
+        sat_glonass_used: u32,
+        signal_noise_ratio: u32,
     },
 }
 
@@ -63,8 +66,11 @@ impl GnssResponse {
         let vdop = results.next().and_then(|v| v.parse::<f32>().ok())?;
         let _reserved2 = results.next()?;
         let sat_gps_view = results.next().and_then(|v| v.parse::<u32>().ok())?;
-        let _sat_gnss_used = results.next()?;
-        let _sat_glonass_view = results.next()?;
+        let sat_gnss_used = results.next().and_then(|v| v.parse::<u32>().ok())?;
+        let sat_glonass_used = results.next().and_then(|v| v.parse::<u32>().ok())?;
+        let _reserved3 = results.next()?;
+        let signal_noise_ratio = results.next().and_then(|v| v.parse::<u32>().ok())?;
+
 
         Some(GnssResponse::Fix {
             latitude,
@@ -76,6 +82,9 @@ impl GnssResponse {
             speed_over_ground,
             course_over_ground,
             sat_gps_view,
+            sat_gnss_used,
+            sat_glonass_used,
+            signal_noise_ratio,
         })
     }
 }
