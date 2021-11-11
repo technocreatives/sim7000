@@ -13,7 +13,7 @@ impl AtExecute for Cgnsinf {
     type Output = GnssResponse;
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub enum GnssResponse {
     NotEnabled,
     NoFix {
@@ -67,10 +67,12 @@ impl GnssResponse {
         let _reserved2 = results.next()?;
         let sat_gps_view = results.next().and_then(|v| v.parse::<u32>().ok())?;
         let sat_gnss_used = results.next().and_then(|v| v.parse::<u32>().ok())?;
-        let sat_glonass_used = results.next().and_then(|v| v.parse::<u32>().ok())?;
+        let sat_glonass_used = results
+            .next()
+            .and_then(|v| v.parse::<u32>().ok())
+            .unwrap_or(0);
         let _reserved3 = results.next()?;
         let signal_noise_ratio = results.next().and_then(|v| v.parse::<u32>().ok())?;
-
 
         Some(GnssResponse::Fix {
             latitude,
@@ -105,5 +107,33 @@ impl AtDecode for GnssResponse {
         decoder.expect_str("OK", timeout)?;
 
         Ok(result)
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::GnssResponse;
+
+    #[test]
+    fn test_fix_gnss_parse() {
+        let gnss_str = "1,1,20171103022632.000,31.222067,121.354368,34.700,0.00,0.0,1,,1.1,1.4,0.9,,21,6,,,45,,";
+        let gnss = GnssResponse::decode_cgnsinf(gnss_str).unwrap();
+
+        let expected = GnssResponse::Fix {
+            latitude: 31.222067,
+            longitude: 121.354368,
+            altitude: 34.7,
+            hdop: 1.1,
+            pdop: 1.4,
+            vdop: 0.9,
+            speed_over_ground: 0.0,
+            course_over_ground: 0.0,
+            sat_gps_view: 21,
+            sat_gnss_used: 6,
+            sat_glonass_used: 0,
+            signal_noise_ratio: 45,
+        };
+
+        assert_eq!(expected, gnss);
     }
 }
