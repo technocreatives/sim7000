@@ -56,9 +56,10 @@ jobs:
       - name: Install Rust
         uses: actions-rs/toolchain@v1
         with:
-          toolchain: stable
+          toolchain: 1.56.1
           profile: minimal
           override: true
+          components: clippy, rustfmt
       
       - name: Run `cargo fmt`
         uses: actions-rs/cargo@v1
