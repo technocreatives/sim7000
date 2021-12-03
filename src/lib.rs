@@ -1,10 +1,13 @@
-#![no_std]
+#![cfg_attr(not(test), no_std)]
 
 use commands::{AtExecute, AtRead, AtWrite};
 use embedded_time::duration::Milliseconds;
 
 pub mod commands;
 pub mod tcp_client;
+
+#[cfg(test)]
+mod test;
 
 #[derive(Debug)]
 pub enum Error<S: core::fmt::Debug> {
