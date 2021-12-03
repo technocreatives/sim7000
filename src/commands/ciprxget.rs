@@ -39,7 +39,11 @@ impl AtDecode for NetworkReceiveResponse {
 
             let mode = decoder.decode_scalar(timeout)?;
             match mode {
-                1 => decoder.end_line(),
+                1 => {
+                    decoder.end_line();
+                    decoder.expect_empty(timeout)?;
+                    decoder.end_line();
+                }
                 2 => {
                     decoder.expect_str(",", timeout)?;
                     // According to the specification the amount to read should actually be the 3rd number.
@@ -148,5 +152,62 @@ impl AtWrite<'_> for Ciprxget {
             });
         }
         Self::Output::decode(&mut decoder, timeout)
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use embedded_time::duration::Milliseconds;
+
+    use crate::{commands::AtWrite, test::MockSerial};
+
+    use super::{Ciprxget, NetworkReceiveMode};
+
+    #[test]
+    fn test_rx_ready() {
+        let mut mock = MockSerial::build()
+            .expect_write(b"AT+CIPRXGET=2,4\r")
+            .expect_read(b"")
+            .expect_read(b"+CIPRXGET: 2,4,4")
+            .expect_read(&[0, 1, 2, 3])
+            .expect_read(b"")
+            .expect_read(b"OK")
+            .finalize();
+
+        let response = Ciprxget
+            .write(
+                NetworkReceiveMode::GetBytes(4),
+                &mut mock,
+                Milliseconds(1000),
+            )
+            .unwrap();
+
+        assert_eq!(response.bytes.unwrap(), &[0, 1, 2, 3])
+    }
+
+    #[test]
+    fn test_rx_wait() {
+        let mut mock = MockSerial::build()
+            .expect_write(b"AT+CIPRXGET=2,4\r")
+            .expect_read(b"")
+            .expect_read(b"+CIPRXGET: 1")
+            .expect_read(b"")
+            .expect_read(b"+CIPRXGET: 1")
+            .expect_read(b"")
+            .expect_read(b"+CIPRXGET: 2,4,4")
+            .expect_read(&[0, 1, 2, 3])
+            .expect_read(b"")
+            .expect_read(b"OK")
+            .finalize();
+
+        let response = Ciprxget
+            .write(
+                NetworkReceiveMode::GetBytes(4),
+                &mut mock,
+                Milliseconds(1000),
+            )
+            .unwrap();
+
+        assert_eq!(response.bytes.unwrap(), &[0, 1, 2, 3])
     }
 }
