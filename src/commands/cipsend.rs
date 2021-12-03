@@ -9,7 +9,7 @@ impl AtCommand for Cipsend {
     const COMMAND: &'static str = "AT+CIPSEND";
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum SendResult {
     Failure,
     Success,
@@ -84,5 +84,49 @@ impl<'a> AtWrite<'a> for Cipsend {
         decoder.end_line();
 
         Self::Output::decode(&mut decoder, timeout)
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use embedded_time::duration::Milliseconds;
+
+    use crate::{
+        commands::{AtWrite, SendResult},
+        test::MockSerial,
+    };
+
+    use super::Cipsend;
+
+    #[test]
+    fn test_send_ok() {
+        let data = b"hello, world!";
+        let mut mock = MockSerial::build()
+            .expect_write(format!("AT+CIPSEND={}\r", data.len()).as_bytes())
+            .expect_read(b"")
+            .expect_read(b"> ")
+            .expect_write(data)
+            .expect_read(b"")
+            .expect_read(b"SEND OK")
+            .finalize();
+
+        let output = Cipsend.write(data, &mut mock, Milliseconds(1000)).unwrap();
+        assert_eq!(output, SendResult::Success);
+    }
+
+    #[test]
+    fn test_send_failed() {
+        let data = b"hello, world!";
+        let mut mock = MockSerial::build()
+            .expect_write(format!("AT+CIPSEND={}\r", data.len()).as_bytes())
+            .expect_read(b"")
+            .expect_read(b"> ")
+            .expect_write(data)
+            .expect_read(b"")
+            .expect_read(b"SEND FAIL")
+            .finalize();
+
+        let output = Cipsend.write(data, &mut mock, Milliseconds(1000)).unwrap();
+        assert_eq!(output, SendResult::Failure);
     }
 }
