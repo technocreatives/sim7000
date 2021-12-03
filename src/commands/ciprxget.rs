@@ -25,50 +25,52 @@ pub struct NetworkReceiveResponse {
     pub bytes: Option<heapless::Vec<u8, 1460>>,
 }
 
+// This decode impl can only be called when mode is 2 or greater.
 impl AtDecode for NetworkReceiveResponse {
     fn decode<B: SerialReadTimeout>(
         decoder: &mut Decoder<B>,
         timeout: Milliseconds,
     ) -> Result<Self, Error<B::SerialError>> {
-        decoder.expect_str("+CIPRXGET: ", timeout)?;
+        // The datasheet makes it look like there can only be one +CIPRXGET response to an AT+CIPRXGET command,
+        // but this is not the case. The sim7000 can respond with +CIPRXGET: 1 to indicate its still waiting to
+        // receive data. +CIPRXGET: 2,... will come on a later line
+        let recv_len = loop {
+            decoder.expect_str("+CIPRXGET: ", timeout)?;
 
-        match decoder.decode_scalar(timeout)? {
-            1 => Ok(NetworkReceiveResponse {
-                mode: NetworkReceiveMode::Enable,
-                bytes: None,
-            }),
-            2 => {
-                decoder.expect_str(",", timeout)?;
-                let req_len = decoder.decode_scalar(timeout)?;
-                decoder.expect_str(",", timeout)?;
-                let _read_bytes = decoder.decode_scalar(timeout)?;
-                decoder.end_line();
-
-                // according to the specification the amount read should actually be `read_bytes`.
-                // But the chip does not follow specification. `read_bytes` is not actually used.
-                let actual_read = req_len;
-                let mut buffer = heapless::Vec::new();
-                buffer
-                    .resize(actual_read as usize, 0)
-                    .map_err(|_| Error::BufferOverflow)?;
-
-                if actual_read > 0 {
-                    decoder.read_exact(&mut buffer, timeout)?;
+            let mode = decoder.decode_scalar(timeout)?;
+            match mode {
+                1 => decoder.end_line(),
+                2 => {
+                    decoder.expect_str(",", timeout)?;
+                    // According to the specification the amount to read should actually be the 3rd number.
+                    // But the chip does not follow specification. The third number seems to be the amount
+                    // remaining in the buffer, but not the amount that it will actually respond with on the
+                    // UART.
+                    break decoder.decode_scalar(timeout)?;
                 }
-
-                decoder.end_line();
-                decoder.expect_empty(timeout)?;
-
-                decoder.end_line();
-                decoder.expect_str("OK", timeout)?;
-
-                Ok(NetworkReceiveResponse {
-                    mode: NetworkReceiveMode::GetBytes(actual_read as u16),
-                    bytes: Some(buffer),
-                })
+                _ => return Err(crate::Error::DecodingFailed),
             }
-            _ => Err(Error::DecodingFailed),
+        };
+
+        let mut buffer = heapless::Vec::new();
+        buffer
+            .resize(recv_len as usize, 0)
+            .map_err(|_| Error::BufferOverflow)?;
+
+        if recv_len > 0 {
+            decoder.read_exact(&mut buffer, timeout)?;
         }
+
+        decoder.end_line();
+        decoder.expect_empty(timeout)?;
+
+        decoder.end_line();
+        decoder.expect_str("OK", timeout)?;
+
+        Ok(NetworkReceiveResponse {
+            mode: NetworkReceiveMode::GetBytes(recv_len as u16),
+            bytes: Some(buffer),
+        })
     }
 }
 
