@@ -42,7 +42,7 @@ impl AtDecode for SystemInfo {
 
         let mut components = decoder.remainder_str(timeout)?.split(',');
 
-        let system_mode = match components.next().unwrap() {
+        let system_mode = match components.next().ok_or(crate::Error::DecodingFailed)? {
             "NO SERVICE" => SystemMode::NoService,
             "GSM" => SystemMode::Gsm,
             "LTE CAT-M1" => SystemMode::LteCatM1,
@@ -50,7 +50,7 @@ impl AtDecode for SystemInfo {
             _ => return Err(crate::Error::DecodingFailed),
         };
 
-        let operation_mode = match components.next().unwrap() {
+        let operation_mode = match components.next().ok_or(crate::Error::DecodingFailed)? {
             "Online" => OperationMode::Online,
             "Offline" => OperationMode::Offline,
             "Factory Test Mode" => OperationMode::FactoryTest,
@@ -60,7 +60,7 @@ impl AtDecode for SystemInfo {
         };
 
         decoder.end_line();
-        decoder.expect_empty(timeout).unwrap();
+        decoder.expect_empty(timeout)?;
         decoder.end_line();
 
         // The SIM7000 may respond with either one or two empty lines before the "OK" depending on if it is in LTE or GSM mode.
