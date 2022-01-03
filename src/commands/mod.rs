@@ -1,6 +1,5 @@
 use crate::{drain_relay, Error, SerialReadTimeout, SerialWrite};
 use embedded_time::duration::Milliseconds;
-use lazy_static::lazy_static;
 
 mod at;
 mod ate;
@@ -291,7 +290,7 @@ impl<'a, B: SerialReadTimeout> Decoder<'a, B> {
                         self.buffer.rotate_left(line_end + 2);
                         self.buffer.truncate(self.buffer.len() - (line_end + 2));
 
-                        if !BAD_CODES.contains(self.current_line.as_ref().unwrap().as_str()) {
+                        if !bad_codes().contains(self.current_line.as_ref().unwrap().as_str()) {
                             return Ok(());
                         }
                     }
@@ -333,14 +332,15 @@ impl<'a, B: SerialReadTimeout> Decoder<'a, B> {
     }
 }
 
-lazy_static! {
-    // The sim7000 sometimes sends unsolicited codes in the middle of a request response cycle. This set contains the list of all known lines that can come in like this. These lines will be discarded since there is no good way to handle them.
-    static ref BAD_CODES: heapless::FnvIndexSet::<&'static str, 16> = {
+static BAD_CODES: spin::Once<heapless::FnvIndexSet<&'static str, 16>> = spin::Once::new();
+
+fn bad_codes() -> &'static heapless::FnvIndexSet<&'static str, 16> {
+    BAD_CODES.call_once(|| {
         let mut m = heapless::FnvIndexSet::new();
 
         // insert can only fail when there is no capacity left
         m.insert("CLOSED").unwrap();
         m.insert("RDY").unwrap();
         m
-    };
+    })
 }
