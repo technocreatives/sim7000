@@ -34,7 +34,6 @@ impl AtDecode for PowerStatus {
             _ => return Err(crate::Error::DecodingFailed),
         };
 
-        decoder.expect_empty(timeout)?;
         decoder.end_line();
         decoder.expect_str("OK", timeout)?;
 

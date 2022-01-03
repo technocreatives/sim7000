@@ -62,8 +62,6 @@ impl AtDecode for RegistrationResponse {
         };
 
         decoder.end_line();
-        decoder.expect_empty(timeout)?;
-        decoder.end_line();
         decoder.expect_str("OK", timeout)?;
 
         Ok(RegistrationResponse { mode, stat })

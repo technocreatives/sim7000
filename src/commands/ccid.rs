@@ -53,8 +53,6 @@ impl AtDecode for Iccid {
         };
 
         decoder.end_line();
-        decoder.expect_empty(timeout)?;
-        decoder.end_line();
         decoder.expect_str("OK", timeout)?;
 
         Ok(result)

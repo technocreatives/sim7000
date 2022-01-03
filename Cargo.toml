@@ -11,5 +11,6 @@ edition = "2021"
 [dependencies]
 embedded-time = "0.12"
 heapless = "0.7"
+lazy_static = {version = "1.4", features = ["spin_no_std"] }
 embedded-hal = "0.2"
 log = "0.4"

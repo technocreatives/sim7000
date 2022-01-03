@@ -2,7 +2,7 @@ use embedded_time::duration::Milliseconds;
 
 use crate::{Error, SerialReadTimeout, SerialWrite};
 
-use super::{AtCommand, AtDecode, AtEncode, AtWrite, Decoder, Encoder};
+use super::{AtCommand, AtDecode, AtEncode, AtWrite, ConnectionState, Decoder, Encoder};
 
 pub struct Cipstart;
 
@@ -44,13 +44,18 @@ impl AtDecode for ConnectionResult {
     ) -> Result<Self, Error<B::SerialError>> {
         decoder.expect_str("OK", timeout)?;
         decoder.end_line();
-        decoder.expect_empty(timeout)?;
-        decoder.end_line();
 
         let status = match decoder.remainder_str(timeout)? {
             "CONNECT OK" => ConnectionResult::Success,
-            "CONNECT FAIL" => ConnectionResult::Failure,
-            _ => return Err(crate::Error::DecodingFailed),
+            "ALREADY CONNECT" => ConnectionResult::Success,
+            _ => {
+                decoder.expect_str("STATE: ", timeout)?;
+                let _ = ConnectionState::try_from(decoder.remainder_str(timeout)?)
+                    .map_err(|_| crate::Error::DecodingFailed)?;
+                decoder.end_line();
+                decoder.expect_str("CONNECT FAIL", timeout)?;
+                ConnectionResult::Failure
+            }
         };
 
         Ok(status)

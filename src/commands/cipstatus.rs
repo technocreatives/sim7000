@@ -26,18 +26,11 @@ pub enum ConnectionState {
     PdpDeact,
 }
 
-impl AtDecode for ConnectionState {
-    fn decode<B: SerialReadTimeout>(
-        decoder: &mut Decoder<B>,
-        timeout: Milliseconds,
-    ) -> Result<Self, Error<B::SerialError>> {
-        decoder.expect_str("OK", timeout)?;
-        decoder.end_line();
-        decoder.expect_empty(timeout)?;
-        decoder.end_line();
+impl TryFrom<&str> for ConnectionState {
+    type Error = ();
 
-        decoder.expect_str("STATE: ", timeout)?;
-        let state = match decoder.remainder_str(timeout)? {
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        Ok(match value {
             "IP INITIAL" => ConnectionState::IpInitial,
             "IP START" => ConnectionState::IpStart,
             "IP CONFIG" => ConnectionState::IpConfig,
@@ -52,8 +45,22 @@ impl AtDecode for ConnectionState {
             "TCP CLOSED" => ConnectionState::TcpClosing,
             "UDP CLOSED" => ConnectionState::UdpClosed,
             "PDP DEACT" => ConnectionState::PdpDeact,
-            _ => return Err(crate::Error::DecodingFailed),
-        };
+            _ => return Err(()),
+        })
+    }
+}
+
+impl AtDecode for ConnectionState {
+    fn decode<B: SerialReadTimeout>(
+        decoder: &mut Decoder<B>,
+        timeout: Milliseconds,
+    ) -> Result<Self, Error<B::SerialError>> {
+        decoder.expect_str("OK", timeout)?;
+        decoder.end_line();
+
+        decoder.expect_str("STATE: ", timeout)?;
+        let state = ConnectionState::try_from(decoder.remainder_str(timeout)?)
+            .map_err(|_| crate::Error::DecodingFailed)?;
 
         Ok(state)
     }

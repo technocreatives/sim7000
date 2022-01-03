@@ -81,15 +81,26 @@ impl SerialReadTimeout for MockSerial {
         }
     }
 
-    fn read_line<'a>(
+    fn read(
         &mut self,
-        out: &'a mut [u8],
-        _: embedded_time::duration::Milliseconds,
-    ) -> Result<Option<&'a str>, Self::SerialError> {
-        match self.operations.pop_front() {
+        buf: &mut [u8],
+        timeout: Milliseconds,
+    ) -> Result<Option<usize>, Self::SerialError> {
+        // hack for draining echoes
+        if timeout <= Milliseconds(200u32) {
+            return Ok(None);
+        }
+
+        match self.operations.front_mut() {
             Some(SerialOperation::Read(bytes)) => {
-                (out[..bytes.len()]).copy_from_slice(&bytes);
-                Ok(Some(core::str::from_utf8(&out[..bytes.len()]).unwrap()))
+                let len_to_read = core::cmp::min(buf.len(), bytes.len());
+                buf[..len_to_read].copy_from_slice(&bytes[..len_to_read]);
+                *bytes = Vec::from(&bytes[len_to_read..]);
+                if bytes.len() == 0 {
+                    self.operations.pop_front();
+                }
+
+                Ok(Some(len_to_read))
             }
             Some(SerialOperation::Write(bytes)) => panic!(
                 "Expected Write of {:?}, read called instead",

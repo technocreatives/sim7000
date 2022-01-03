@@ -41,8 +41,6 @@ impl AtDecode for NetworkReceiveResponse {
             match mode {
                 1 => {
                     decoder.end_line();
-                    decoder.expect_empty(timeout)?;
-                    decoder.end_line();
                 }
                 2 => {
                     decoder.expect_str(",", timeout)?;
@@ -64,9 +62,6 @@ impl AtDecode for NetworkReceiveResponse {
         if recv_len > 0 {
             decoder.read_exact(&mut buffer, timeout)?;
         }
-
-        decoder.end_line();
-        decoder.expect_empty(timeout)?;
 
         decoder.end_line();
         decoder.expect_str("OK", timeout)?;
@@ -126,23 +121,9 @@ impl AtWrite<'_> for Ciprxget {
         encoder.encode_str("=")?;
 
         parameter.encode(&mut encoder)?;
-
-        // Wait 200ms for an echo to appear.
-        let echoed = drain_relay(serial, Milliseconds(200))?;
-
         serial.write(b"\r")?;
 
         let mut decoder = Decoder::new(serial);
-
-        // Drain the echoed newline
-        if echoed {
-            decoder.expect_empty(timeout)?;
-            decoder.end_line();
-        }
-
-        // Drain the newline that starts every command
-        decoder.expect_empty(timeout)?;
-        decoder.end_line();
 
         if parameter == NetworkReceiveMode::Disable || parameter == NetworkReceiveMode::Enable {
             <() as AtDecode>::decode(&mut decoder, timeout)?;
@@ -167,11 +148,8 @@ mod test {
     fn test_rx_ready() {
         let mut mock = MockSerial::build()
             .expect_write(b"AT+CIPRXGET=2,4\r")
-            .expect_read(b"")
-            .expect_read(b"+CIPRXGET: 2,4,4")
-            .expect_read(&[0, 1, 2, 3])
-            .expect_read(b"")
-            .expect_read(b"OK")
+            .expect_read(b"\r\n+CIPRXGET: 2,4,4\r\n1234")
+            .expect_read(b"\r\nOK\r\n")
             .finalize();
 
         let response = Ciprxget
@@ -182,22 +160,18 @@ mod test {
             )
             .unwrap();
 
-        assert_eq!(response.bytes.unwrap(), &[0, 1, 2, 3])
+        assert_eq!(response.bytes.unwrap(), b"1234")
     }
 
     #[test]
     fn test_rx_wait() {
         let mut mock = MockSerial::build()
             .expect_write(b"AT+CIPRXGET=2,4\r")
-            .expect_read(b"")
-            .expect_read(b"+CIPRXGET: 1")
-            .expect_read(b"")
-            .expect_read(b"+CIPRXGET: 1")
-            .expect_read(b"")
-            .expect_read(b"+CIPRXGET: 2,4,4")
+            .expect_read(b"\r\n+CIPRXGET: 1\r\n")
+            .expect_read(b"\r\n+CIPRXGET: 1\r\n")
+            .expect_read(b"\r\n+CIPRXGET: 2,4,4\r\n")
             .expect_read(&[0, 1, 2, 3])
-            .expect_read(b"")
-            .expect_read(b"OK")
+            .expect_read(b"\r\nOK\r\n")
             .finalize();
 
         let response = Ciprxget

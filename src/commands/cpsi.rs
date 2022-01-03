@@ -60,10 +60,8 @@ impl AtDecode for SystemInfo {
         };
 
         decoder.end_line();
-        decoder.expect_empty(timeout)?;
-        decoder.end_line();
 
-        // The SIM7000 may respond with either one or two empty lines before the "OK" depending on if it is in LTE or GSM mode.
+        // The SIM7000 may respond with an extra empty line in GSM mode for no reason
         match decoder.remainder_str(timeout)? {
             "OK" => {
                 decoder.expect_str("OK", timeout)?;
@@ -73,7 +71,6 @@ impl AtDecode for SystemInfo {
                 });
             }
             "" => {
-                decoder.expect_empty(timeout)?;
                 decoder.end_line();
             }
             _ => return Err(Error::DecodingFailed),
@@ -104,11 +101,9 @@ mod test {
     fn test_gsm_response() {
         let mut mock = MockSerial::build()
             .expect_write(b"AT+CPSI?\r")
-            .expect_read(b"")
-            .expect_read(b"+CPSI: GSM,Online,240-01,0x11a4,25882,80 EGSM 900,-89,0,22-22")
-            .expect_read(b"")
-            .expect_read(b"")
-            .expect_read(b"OK")
+            .expect_read(b"\r\n+CPSI: GSM,Online,240-01,0x11a4,25882,80 EGSM 900,-89,0,22-22\r\n")
+            .expect_read(b"\r\n\r\n")
+            .expect_read(b"\r\nOK\r\n")
             .finalize();
 
         let response = Cpsi.read(&mut mock, Milliseconds(1000)).unwrap();
@@ -126,10 +121,8 @@ mod test {
     fn test_lte_response() {
         let mut mock = MockSerial::build()
             .expect_write(b"AT+CPSI?\r")
-            .expect_read(b"")
-            .expect_read(b"+CPSI: LTE CAT-M1,Online,240-01,0x0081,25716767,254,EUTRAN-BAND3,1300,5,5,-13,-84,-54,18")
-            .expect_read(b"")
-            .expect_read(b"OK")
+            .expect_read(b"\r\n+CPSI: LTE CAT-M1,Online,240-01,0x0081,25716767,254,EUTRAN-BAND3,1300,5,5,-13,-84,-54,18\r\n")
+            .expect_read(b"\r\nOK\r\n")
             .finalize();
 
         let response = Cpsi.read(&mut mock, Milliseconds(1000)).unwrap();

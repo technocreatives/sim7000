@@ -12,6 +12,7 @@ mod test;
 #[derive(Debug)]
 pub enum Error<S: core::fmt::Debug> {
     DecodingFailed,
+    InvalidUtf8,
     SerialError(S),
     Timeout,
     BufferOverflow,
@@ -34,11 +35,11 @@ pub trait SerialReadTimeout: Serial {
         timeout: Milliseconds,
     ) -> Result<Option<()>, Self::SerialError>;
 
-    fn read_line<'a>(
+    fn read(
         &mut self,
-        out: &'a mut [u8],
+        buf: &mut [u8],
         timeout: Milliseconds,
-    ) -> Result<Option<&'a str>, Self::SerialError>;
+    ) -> Result<Option<usize>, Self::SerialError>;
 }
 
 pub trait SerialWrite: Serial {
@@ -66,20 +67,18 @@ pub trait AtModem: SerialWrite + SerialReadTimeout {
     ) -> Result<C::Output, Error<Self::SerialError>>;
 }
 
-fn drain_relay<T>(relay: &mut T, mut timeout: Milliseconds) -> Result<bool, T::SerialError>
+fn drain_relay<T>(relay: &mut T, mut timeout: Milliseconds) -> Result<(), T::SerialError>
 where
     T: SerialReadTimeout,
 {
     let mut recv_buf = [0u8; 1];
-    let mut drained_data = false;
     loop {
         let res = relay.read_exact(&mut recv_buf, timeout);
         match res {
             Err(error) => return Err(error),
-            Ok(None) => return Ok(drained_data),
+            Ok(None) => return Ok(()),
             _ => {
                 log::trace!("DRAIN: {:?}", core::str::from_utf8(&recv_buf));
-                drained_data = true;
             }
         };
 

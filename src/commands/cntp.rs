@@ -68,8 +68,6 @@ impl AtDecode for CntpResponse {
     ) -> Result<Self, crate::Error<B::SerialError>> {
         decoder.expect_str("OK", timeout)?;
         decoder.end_line();
-        decoder.expect_empty(timeout)?;
-        decoder.end_line();
 
         Ok(match decoder.decode_scalar(timeout)? {
             1 => {

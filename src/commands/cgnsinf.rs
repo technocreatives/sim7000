@@ -102,8 +102,6 @@ impl AtDecode for GnssResponse {
             .ok_or(crate::Error::DecodingFailed)?;
 
         decoder.end_line();
-        decoder.expect_empty(timeout)?;
-        decoder.end_line();
         decoder.expect_str("OK", timeout)?;
 
         Ok(result)

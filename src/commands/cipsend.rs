@@ -48,29 +48,14 @@ impl<'a> AtWrite<'a> for Cipsend {
 
         encoder.encode_scalar(parameter.len() as i32)?;
 
-        // Wait 200ms for an echo to appear.
-        let echoed = crate::drain_relay(serial, Milliseconds(200))?;
-
         serial.write(b"\r")?;
 
-        let mut decoder = Decoder::new(serial);
-
-        // Drain the echoed newline
-        if echoed {
-            decoder.expect_empty(timeout)?;
-            decoder.end_line();
-        }
-
-        // Drain the newline that starts every command
-        decoder.expect_empty(timeout)?;
-        decoder.end_line();
-
-        let mut buf = [0u8; 2];
+        let mut buf = [0u8; 4];
         serial
-            .read_exact(&mut buf[..2], timeout)?
+            .read_exact(&mut buf[..4], timeout)?
             .ok_or(crate::Error::Timeout)?;
 
-        if buf != *b"> " {
+        if buf != *b"\r\n> " {
             return Err(crate::Error::DecodingFailed);
         }
 
@@ -79,9 +64,6 @@ impl<'a> AtWrite<'a> for Cipsend {
 
         // Pray to god ECHO is disabled, there is no way to handle it here.
         let mut decoder = Decoder::new(serial);
-
-        decoder.expect_empty(timeout)?;
-        decoder.end_line();
 
         Self::Output::decode(&mut decoder, timeout)
     }
@@ -103,11 +85,9 @@ mod test {
         let data = b"hello, world!";
         let mut mock = MockSerial::build()
             .expect_write(format!("AT+CIPSEND={}\r", data.len()).as_bytes())
-            .expect_read(b"")
-            .expect_read(b"> ")
+            .expect_read(b"\r\n> ")
             .expect_write(data)
-            .expect_read(b"")
-            .expect_read(b"SEND OK")
+            .expect_read(b"\r\nSEND OK\r\n")
             .finalize();
 
         let output = Cipsend.write(data, &mut mock, Milliseconds(1000)).unwrap();
@@ -119,11 +99,9 @@ mod test {
         let data = b"hello, world!";
         let mut mock = MockSerial::build()
             .expect_write(format!("AT+CIPSEND={}\r", data.len()).as_bytes())
-            .expect_read(b"")
-            .expect_read(b"> ")
+            .expect_read(b"\r\n> ")
             .expect_write(data)
-            .expect_read(b"")
-            .expect_read(b"SEND FAIL")
+            .expect_read(b"\r\nSEND FAIL\r\n")
             .finalize();
 
         let output = Cipsend.write(data, &mut mock, Milliseconds(1000)).unwrap();

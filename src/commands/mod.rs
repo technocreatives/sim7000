@@ -1,5 +1,6 @@
 use crate::{drain_relay, Error, SerialReadTimeout, SerialWrite};
 use embedded_time::duration::Milliseconds;
+use lazy_static::lazy_static;
 
 mod at;
 mod ate;
@@ -88,22 +89,9 @@ pub trait AtWrite<'a>: AtCommand {
 
         parameter.encode(&mut encoder)?;
 
-        // Wait 200ms for an echo to appear.
-        let echoed = drain_relay(serial, Milliseconds(200))?;
-
         serial.write(b"\r")?;
 
         let mut decoder = Decoder::new(serial);
-
-        // Drain the echoed newline
-        if echoed {
-            decoder.expect_empty(timeout)?;
-            decoder.end_line();
-        }
-
-        // Drain the newline that starts every command
-        decoder.expect_empty(timeout)?;
-        decoder.end_line();
 
         Self::Output::decode(&mut decoder, timeout)
     }
@@ -123,24 +111,9 @@ pub trait AtRead: AtCommand {
         encoder.encode_str(<Self as AtCommand>::COMMAND)?;
         encoder.encode_str("?")?;
 
-        // Echo may or may not be enabled. The following code deals with a potential echo.
-
-        // Wait 200ms for an echo to appear.
-        let echoed = drain_relay(serial, Milliseconds(200))?;
-
         serial.write(b"\r")?;
 
         let mut decoder = Decoder::new(serial);
-
-        // Drain the echoed newline
-        if echoed {
-            decoder.expect_empty(timeout)?;
-            decoder.end_line();
-        }
-
-        // Drain the newline that starts every command
-        decoder.expect_empty(timeout)?;
-        decoder.end_line();
 
         Self::Output::decode(&mut decoder, timeout)
     }
@@ -159,24 +132,9 @@ pub trait AtExecute: AtCommand {
         let mut encoder = Encoder::new(serial);
         encoder.encode_str(<Self as AtCommand>::COMMAND)?;
 
-        // Echo may or may not be enabled. The following code deals with a potential echo.
-
-        // Wait 200ms for an echo to appear.
-        let echoed = drain_relay(serial, Milliseconds(200))?;
-
         serial.write(b"\r")?;
 
         let mut decoder = Decoder::new(serial);
-
-        // Drain the echoed newline
-        if echoed {
-            decoder.expect_empty(timeout)?;
-            decoder.end_line();
-        }
-
-        // Drain the newline that starts every command
-        decoder.expect_empty(timeout)?;
-        decoder.end_line();
 
         Self::Output::decode(&mut decoder, timeout)
     }
@@ -235,7 +193,7 @@ impl<'a, B: SerialWrite> Encoder<'a, B> {
     }
 
     pub fn encode_str(&mut self, value: &str) -> Result<(), Error<B::SerialError>> {
-        log::trace!("at_debug: SEND STR: {:?}", value);
+        log::trace!("SEND STR: {:?}", value);
 
         let data = value.as_bytes();
         self.encode_bytes(data)
@@ -248,28 +206,20 @@ impl<'a, B: SerialWrite> Encoder<'a, B> {
 }
 
 pub struct Decoder<'a, B: SerialReadTimeout> {
-    buf: &'a mut B,
+    read: &'a mut B,
+    buffer: heapless::Vec<u8, 256>,
     current_line: Option<heapless::String<256>>,
     offset: usize,
 }
 
 impl<'a, B: SerialReadTimeout> Decoder<'a, B> {
-    pub fn new(buf: &'a mut B) -> Self {
+    pub fn new(read: &'a mut B) -> Self {
         Self {
-            buf,
+            buffer: heapless::Vec::new(),
+            read,
             current_line: None,
             offset: 0,
         }
-    }
-
-    pub fn expect_empty(&mut self, timeout: Milliseconds) -> Result<(), Error<B::SerialError>> {
-        self.fill_line(timeout)?;
-
-        if !&self.current_line.as_ref().unwrap()[self.offset..].is_empty() {
-            return Err(crate::Error::DecodingFailed);
-        }
-
-        Ok(())
     }
 
     pub fn decode_scalar(&mut self, timeout: Milliseconds) -> Result<i32, Error<B::SerialError>> {
@@ -321,17 +271,44 @@ impl<'a, B: SerialReadTimeout> Decoder<'a, B> {
 
     fn fill_line(&mut self, timeout: Milliseconds) -> Result<(), Error<B::SerialError>> {
         if self.current_line.is_none() {
-            let mut buf = [0u8; 256];
-            let line = self
-                .buf
-                .read_line(&mut buf, timeout)?
-                .ok_or(crate::Error::Timeout)?;
+            loop {
+                log::trace!("CURRENT BUFFER {:?}", core::str::from_utf8(&self.buffer));
+                if let Some(position) = self.buffer.windows(2).position(|slice| slice == b"\r\n") {
+                    self.buffer.rotate_left(position);
+                    self.buffer.truncate(self.buffer.len() - position);
 
-            #[cfg(feature = "at_debug")]
-            log::info!("at_debug: RECV LINE: {:?}", line);
+                    if let Some(position) = self.buffer[2..]
+                        .windows(2)
+                        .position(|slice| slice == b"\r\n")
+                    {
+                        let line_end = position + 2;
+                        let s = core::str::from_utf8(&self.buffer[2..line_end])
+                            .map_err(|_| Error::InvalidUtf8)?;
+                        log::trace!("RECV LINE: {:?}", s);
+                        self.current_line = Some(heapless::String::from(s));
+                        self.offset = 0;
 
-            self.current_line = Some(heapless::String::from(line));
-            self.offset = 0;
+                        self.buffer.rotate_left(line_end + 2);
+                        self.buffer.truncate(self.buffer.len() - (line_end + 2));
+
+                        if !BAD_CODES.contains(self.current_line.as_ref().unwrap().as_str()) {
+                            return Ok(());
+                        }
+                    }
+                }
+
+                let mut buf = [0u8; 256];
+                if let Some(amount) = self.read.read(
+                    &mut buf[..self.buffer.capacity() - self.buffer.len()],
+                    timeout,
+                )? {
+                    self.buffer
+                        .extend_from_slice(&buf[..amount])
+                        .map_err(|_| Error::BufferOverflow)?;
+                } else {
+                    return Err(Error::Timeout);
+                }
+            }
         }
 
         Ok(())
@@ -342,10 +319,28 @@ impl<'a, B: SerialReadTimeout> Decoder<'a, B> {
         buf: &mut [u8],
         timeout: Milliseconds,
     ) -> Result<(), Error<B::SerialError>> {
-        if self.buf.read_exact(buf, timeout)?.is_none() {
+        if !self.buffer.is_empty() {
+            let len = core::cmp::min(self.buffer.len(), buf.len());
+            buf[..len].copy_from_slice(&self.buffer[..len]);
+            if len < buf.len() && self.read.read_exact(&mut buf[len..], timeout)?.is_none() {
+                return Err(crate::Error::Timeout);
+            }
+        } else if self.read.read_exact(buf, timeout)?.is_none() {
             return Err(crate::Error::Timeout);
         }
 
         Ok(())
     }
+}
+
+lazy_static! {
+    // The sim7000 sometimes sends unsolicited codes in the middle of a request response cycle. This set contains the list of all known lines that can come in like this. These lines will be discarded since there is no good way to handle them.
+    static ref BAD_CODES: heapless::FnvIndexSet::<&'static str, 16> = {
+        let mut m = heapless::FnvIndexSet::new();
+
+        // insert can only fail when there is no capacity left
+        m.insert("CLOSED").unwrap();
+        m.insert("RDY").unwrap();
+        m
+    };
 }
