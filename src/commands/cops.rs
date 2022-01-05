@@ -1,5 +1,3 @@
-use embedded_time::duration::Milliseconds;
-
 use crate::{Error, SerialReadTimeout};
 
 use super::{AtCommand, AtDecode, AtRead, Decoder};
@@ -35,10 +33,10 @@ pub struct OperatorInfo {
 impl AtDecode for OperatorInfo {
     fn decode<B: SerialReadTimeout>(
         decoder: &mut Decoder<B>,
-        timeout: Milliseconds,
+        timeout_ms: u32,
     ) -> Result<Self, Error<B::SerialError>> {
-        decoder.expect_str("+COPS: ", timeout)?;
-        let mut components = decoder.remainder_str(timeout)?.split(',');
+        decoder.expect_str("+COPS: ", timeout_ms)?;
+        let mut components = decoder.remainder_str(timeout_ms)?.split(',');
 
         let mode = match components
             .next()
@@ -72,7 +70,7 @@ impl AtDecode for OperatorInfo {
             .into();
 
         decoder.end_line();
-        decoder.expect_str("OK", timeout)?;
+        decoder.expect_str("OK", timeout_ms)?;
 
         Ok(OperatorInfo {
             mode,

@@ -1,6 +1,5 @@
 use super::{AtCommand, AtDecode, AtExecute, Decoder};
 use crate::{Error, SerialReadTimeout};
-use embedded_time::duration::Milliseconds;
 
 pub struct Ciicr;
 
@@ -17,9 +16,9 @@ pub enum GprsResult {
 impl AtDecode for GprsResult {
     fn decode<B: SerialReadTimeout>(
         decoder: &mut Decoder<B>,
-        timeout: Milliseconds,
+        timeout_ms: u32,
     ) -> Result<Self, Error<B::SerialError>> {
-        Ok(match decoder.remainder_str(timeout)? {
+        Ok(match decoder.remainder_str(timeout_ms)? {
             "OK" => GprsResult::Success,
             "ERROR" => GprsResult::Failure,
             _ => return Err(crate::Error::DecodingFailed),

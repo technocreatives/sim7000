@@ -1,5 +1,3 @@
-use embedded_time::duration::Milliseconds;
-
 use crate::{Error, SerialReadTimeout};
 
 use super::{AtCommand, AtDecode, AtExecute};
@@ -21,9 +19,9 @@ pub struct Iccid {
 impl AtDecode for Iccid {
     fn decode<B: SerialReadTimeout>(
         decoder: &mut super::Decoder<B>,
-        timeout: Milliseconds,
+        timeout_ms: u32,
     ) -> Result<Self, Error<B::SerialError>> {
-        let string = decoder.remainder_str(timeout)?;
+        let string = decoder.remainder_str(timeout_ms)?;
 
         //  "89 88 28 0666001104843 8"
         //  "89 01 26 0862291477114 f"
@@ -53,7 +51,7 @@ impl AtDecode for Iccid {
         };
 
         decoder.end_line();
-        decoder.expect_str("OK", timeout)?;
+        decoder.expect_str("OK", timeout_ms)?;
 
         Ok(result)
     }

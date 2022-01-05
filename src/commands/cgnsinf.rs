@@ -1,7 +1,6 @@
 use crate::{Error, SerialReadTimeout};
 
 use super::{AtCommand, AtDecode, AtExecute, Decoder};
-use embedded_time::duration::Milliseconds;
 
 pub struct Cgnsinf;
 
@@ -94,15 +93,15 @@ impl GnssResponse {
 impl AtDecode for GnssResponse {
     fn decode<B: SerialReadTimeout>(
         decoder: &mut Decoder<B>,
-        timeout: Milliseconds,
+        timeout_ms: u32,
     ) -> Result<Self, Error<B::SerialError>> {
-        decoder.expect_str("+CGNSINF: ", timeout)?;
+        decoder.expect_str("+CGNSINF: ", timeout_ms)?;
 
-        let result = GnssResponse::decode_cgnsinf(decoder.remainder_str(timeout)?)
+        let result = GnssResponse::decode_cgnsinf(decoder.remainder_str(timeout_ms)?)
             .ok_or(crate::Error::DecodingFailed)?;
 
         decoder.end_line();
-        decoder.expect_str("OK", timeout)?;
+        decoder.expect_str("OK", timeout_ms)?;
 
         Ok(result)
     }

@@ -1,5 +1,4 @@
 use crate::{Error, SerialReadTimeout, SerialWrite};
-use embedded_time::duration::Milliseconds;
 
 use super::{AtCommand, AtDecode, AtEncode, AtWrite, Decoder, Encoder};
 
@@ -18,9 +17,9 @@ pub enum SendResult {
 impl AtDecode for SendResult {
     fn decode<B: SerialReadTimeout>(
         decoder: &mut Decoder<B>,
-        timeout: Milliseconds,
+        timeout_ms: u32,
     ) -> Result<Self, Error<B::SerialError>> {
-        let status = match decoder.remainder_str(timeout)? {
+        let status = match decoder.remainder_str(timeout_ms)? {
             "SEND OK" => SendResult::Success,
             "SEND FAIL" => SendResult::Failure,
             _ => return Err(crate::Error::DecodingFailed),
@@ -38,9 +37,9 @@ impl<'a> AtWrite<'a> for Cipsend {
         &self,
         parameter: Self::Input,
         serial: &mut B,
-        timeout: Milliseconds,
+        timeout_ms: u32,
     ) -> Result<Self::Output, Error<B::SerialError>> {
-        crate::drain_relay(serial, Milliseconds(0))?;
+        crate::drain_relay(serial, 0)?;
 
         let mut encoder = Encoder::new(serial);
         encoder.encode_str(<Self as AtCommand>::COMMAND)?;
@@ -52,7 +51,7 @@ impl<'a> AtWrite<'a> for Cipsend {
 
         let mut buf = [0u8; 4];
         serial
-            .read_exact(&mut buf[..4], timeout)?
+            .read_exact(&mut buf[..4], timeout_ms)?
             .ok_or(crate::Error::Timeout)?;
 
         if buf != *b"\r\n> " {
@@ -65,13 +64,12 @@ impl<'a> AtWrite<'a> for Cipsend {
         // Pray to god ECHO is disabled, there is no way to handle it here.
         let mut decoder = Decoder::new(serial);
 
-        Self::Output::decode(&mut decoder, timeout)
+        Self::Output::decode(&mut decoder, timeout_ms)
     }
 }
 
 #[cfg(test)]
 mod test {
-    use embedded_time::duration::Milliseconds;
 
     use crate::{
         commands::{AtWrite, SendResult},
@@ -90,7 +88,7 @@ mod test {
             .expect_read(b"\r\nSEND OK\r\n")
             .finalize();
 
-        let output = Cipsend.write(data, &mut mock, Milliseconds(1000)).unwrap();
+        let output = Cipsend.write(data, &mut mock, 1000).unwrap();
         assert_eq!(output, SendResult::Success);
     }
 
@@ -104,7 +102,7 @@ mod test {
             .expect_read(b"\r\nSEND FAIL\r\n")
             .finalize();
 
-        let output = Cipsend.write(data, &mut mock, Milliseconds(1000)).unwrap();
+        let output = Cipsend.write(data, &mut mock, 1000).unwrap();
         assert_eq!(output, SendResult::Failure);
     }
 }

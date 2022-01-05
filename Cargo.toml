@@ -9,8 +9,6 @@ repository = "https://github.com/technocreatives/sim7000"
 edition = "2021"
 
 [dependencies]
-embedded-time = "0.12"
 heapless = "0.7"
 spin = {version = "0.9", default-features = false, features = ["once"] }
-embedded-hal = "0.2"
 log = "0.4"

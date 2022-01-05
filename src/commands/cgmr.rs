@@ -1,7 +1,6 @@
 use crate::{Error, SerialReadTimeout};
 
 use super::{AtCommand, AtDecode, AtExecute, Decoder};
-use embedded_time::duration::Milliseconds;
 
 pub struct Cgmr;
 
@@ -21,17 +20,17 @@ pub struct CgmrResponse {
 impl AtDecode for CgmrResponse {
     fn decode<B: SerialReadTimeout>(
         decoder: &mut Decoder<B>,
-        timeout: Milliseconds,
+        timeout_ms: u32,
     ) -> Result<Self, Error<B::SerialError>> {
-        decoder.expect_str("Revision:", timeout)?;
+        decoder.expect_str("Revision:", timeout_ms)?;
 
         let result = CgmrResponse {
-            firmware: decoder.remainder_str(timeout)?.into(),
+            firmware: decoder.remainder_str(timeout_ms)?.into(),
         };
 
         decoder.end_line();
 
-        decoder.expect_str("OK", timeout)?;
+        decoder.expect_str("OK", timeout_ms)?;
 
         Ok(result)
     }

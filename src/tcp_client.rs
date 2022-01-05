@@ -1,37 +1,36 @@
 use super::commands::{self, AtWrite, ConnectionResult};
 use crate::{AtModem, Error};
-use embedded_time::duration::Milliseconds;
 use log::*;
 
 pub struct TcpClient {
-    read_timeout: Milliseconds,
-    write_timeout: Milliseconds,
+    read_timeout_ms: u32,
+    write_timeout_ms: u32,
 }
 
 impl Default for TcpClient {
     fn default() -> Self {
         Self {
-            read_timeout: Milliseconds::new(2000),
-            write_timeout: Milliseconds::new(5000),
+            read_timeout_ms: 2000,
+            write_timeout_ms: 5000,
         }
     }
 }
 
 impl TcpClient {
-    pub fn set_read_timeout(&mut self, timeout: Milliseconds) {
-        self.read_timeout = timeout;
+    pub fn set_read_timeout(&mut self, timeout_ms: u32) {
+        self.read_timeout_ms = timeout_ms;
     }
 
-    pub fn read_timeout(&self) -> Option<Milliseconds> {
-        Some(self.read_timeout)
+    pub fn read_timeout(&self) -> Option<u32> {
+        Some(self.read_timeout_ms)
     }
 
-    pub fn set_write_timeout(&mut self, timeout: Milliseconds) {
-        self.write_timeout = timeout;
+    pub fn set_write_timeout(&mut self, timeout_ms: u32) {
+        self.write_timeout_ms = timeout_ms;
     }
 
-    pub fn write_timeout(&self) -> Option<Milliseconds> {
-        Some(self.write_timeout)
+    pub fn write_timeout(&self) -> Option<u32> {
+        Some(self.write_timeout_ms)
     }
 
     pub fn connect<T>(
@@ -39,7 +38,7 @@ impl TcpClient {
         modem: &mut T,
         host: &'static str,
         port: u16,
-        timeout: Option<Milliseconds>,
+        timeout: Option<u32>,
     ) -> Result<(), Error<T::SerialError>>
     where
         T: AtModem,
@@ -52,7 +51,7 @@ impl TcpClient {
                 port,
             },
             modem,
-            timeout.unwrap_or(self.write_timeout),
+            timeout.unwrap_or(self.write_timeout_ms),
         )?;
 
         if result == ConnectionResult::Failure {
@@ -64,13 +63,13 @@ impl TcpClient {
     pub fn disconnect<T>(
         &mut self,
         modem: &mut T,
-        timeout: Option<Milliseconds>,
+        timeout: Option<u32>,
     ) -> Result<(), Error<T::SerialError>>
     where
         T: AtModem,
     {
         let cmd = commands::Cipshut;
-        modem.execute(cmd, timeout.unwrap_or(self.write_timeout))?;
+        modem.execute(cmd, timeout.unwrap_or(self.write_timeout_ms))?;
         Ok(())
     }
 
@@ -79,7 +78,7 @@ impl TcpClient {
         T: AtModem,
     {
         let cmd = commands::Cipsend;
-        if let Err(e) = AtModem::write(modem, cmd, data, self.write_timeout) {
+        if let Err(e) = AtModem::write(modem, cmd, data, self.write_timeout_ms) {
             // // If the send command fails, still write the data to be sent into the buffer, to
             // // prevent the modem getting into a state where it expects data outside of this function.
             // // This is fixed properly by the modem not having power failures, and better modem command logic
@@ -125,7 +124,7 @@ impl TcpClient {
             modem,
             commands::Ciprxget,
             commands::NetworkReceiveMode::GetBytes(bytes_left),
-            self.read_timeout,
+            self.read_timeout_ms,
         )?;
 
         if let Some(bytes) = response.bytes {
@@ -140,7 +139,7 @@ impl TcpClient {
         let cmd = commands::Cipstatus;
 
         let result = matches!(
-            modem.execute(cmd, self.write_timeout),
+            modem.execute(cmd, self.write_timeout_ms),
             Ok(commands::ConnectionState::ConnectOk)
         );
         info!("is_connected: {}", result);

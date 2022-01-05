@@ -1,5 +1,4 @@
 use crate::{drain_relay, Error, SerialReadTimeout, SerialWrite};
-use embedded_time::duration::Milliseconds;
 
 mod at;
 mod ate;
@@ -78,9 +77,9 @@ pub trait AtWrite<'a>: AtCommand {
         &self,
         parameter: Self::Input,
         serial: &mut B,
-        timeout: Milliseconds,
+        timeout_ms: u32,
     ) -> Result<Self::Output, Error<B::SerialError>> {
-        drain_relay(serial, Milliseconds(0))?;
+        drain_relay(serial, 0)?;
 
         let mut encoder = Encoder::new(serial);
         encoder.encode_str(<Self as AtCommand>::COMMAND)?;
@@ -92,7 +91,7 @@ pub trait AtWrite<'a>: AtCommand {
 
         let mut decoder = Decoder::new(serial);
 
-        Self::Output::decode(&mut decoder, timeout)
+        Self::Output::decode(&mut decoder, timeout_ms)
     }
 }
 
@@ -102,9 +101,9 @@ pub trait AtRead: AtCommand {
     fn read<B: SerialReadTimeout + SerialWrite>(
         &self,
         serial: &mut B,
-        timeout: Milliseconds,
+        timeout_ms: u32,
     ) -> Result<Self::Output, Error<B::SerialError>> {
-        drain_relay(serial, Milliseconds(0))?;
+        drain_relay(serial, 0)?;
 
         let mut encoder = Encoder::new(serial);
         encoder.encode_str(<Self as AtCommand>::COMMAND)?;
@@ -114,7 +113,7 @@ pub trait AtRead: AtCommand {
 
         let mut decoder = Decoder::new(serial);
 
-        Self::Output::decode(&mut decoder, timeout)
+        Self::Output::decode(&mut decoder, timeout_ms)
     }
 }
 
@@ -124,9 +123,9 @@ pub trait AtExecute: AtCommand {
     fn execute<B: SerialReadTimeout + SerialWrite>(
         &self,
         serial: &mut B,
-        timeout: Milliseconds,
+        timeout_ms: u32,
     ) -> Result<Self::Output, Error<B::SerialError>> {
-        drain_relay(serial, Milliseconds(0))?;
+        drain_relay(serial, 0)?;
 
         let mut encoder = Encoder::new(serial);
         encoder.encode_str(<Self as AtCommand>::COMMAND)?;
@@ -135,7 +134,7 @@ pub trait AtExecute: AtCommand {
 
         let mut decoder = Decoder::new(serial);
 
-        Self::Output::decode(&mut decoder, timeout)
+        Self::Output::decode(&mut decoder, timeout_ms)
     }
 }
 
@@ -165,16 +164,16 @@ impl AtEncode for i32 {
 pub trait AtDecode: Sized {
     fn decode<B: SerialReadTimeout>(
         decoder: &mut Decoder<B>,
-        timeout: Milliseconds,
+        timeout_ms: u32,
     ) -> Result<Self, Error<B::SerialError>>;
 }
 
 impl AtDecode for () {
     fn decode<B: SerialReadTimeout>(
         decoder: &mut Decoder<B>,
-        timeout: Milliseconds,
+        timeout_ms: u32,
     ) -> Result<Self, Error<B::SerialError>> {
-        decoder.expect_str("OK", timeout)
+        decoder.expect_str("OK", timeout_ms)
     }
 }
 
@@ -221,8 +220,8 @@ impl<'a, B: SerialReadTimeout> Decoder<'a, B> {
         }
     }
 
-    pub fn decode_scalar(&mut self, timeout: Milliseconds) -> Result<i32, Error<B::SerialError>> {
-        self.fill_line(timeout)?;
+    pub fn decode_scalar(&mut self, timeout_ms: u32) -> Result<i32, Error<B::SerialError>> {
+        self.fill_line(timeout_ms)?;
         let line = &self.current_line.as_ref().unwrap()[self.offset..];
 
         let index = line
@@ -247,9 +246,9 @@ impl<'a, B: SerialReadTimeout> Decoder<'a, B> {
     pub fn expect_str(
         &mut self,
         value: &str,
-        timeout: Milliseconds,
+        timeout_ms: u32,
     ) -> Result<(), Error<B::SerialError>> {
-        self.fill_line(timeout)?;
+        self.fill_line(timeout_ms)?;
         let line = &self.current_line.as_ref().unwrap()[self.offset..];
         if line.len() < value.len() {
             return Err(crate::Error::DecodingFailed);
@@ -263,12 +262,12 @@ impl<'a, B: SerialReadTimeout> Decoder<'a, B> {
         Ok(())
     }
 
-    pub fn remainder_str(&mut self, timeout: Milliseconds) -> Result<&str, Error<B::SerialError>> {
-        self.fill_line(timeout)?;
+    pub fn remainder_str(&mut self, timeout_ms: u32) -> Result<&str, Error<B::SerialError>> {
+        self.fill_line(timeout_ms)?;
         Ok(&self.current_line.as_ref().unwrap()[self.offset..])
     }
 
-    fn fill_line(&mut self, timeout: Milliseconds) -> Result<(), Error<B::SerialError>> {
+    fn fill_line(&mut self, timeout_ms: u32) -> Result<(), Error<B::SerialError>> {
         if self.current_line.is_none() {
             loop {
                 log::trace!("CURRENT BUFFER {:?}", core::str::from_utf8(&self.buffer));
@@ -299,7 +298,7 @@ impl<'a, B: SerialReadTimeout> Decoder<'a, B> {
                 let mut buf = [0u8; 256];
                 if let Some(amount) = self.read.read(
                     &mut buf[..self.buffer.capacity() - self.buffer.len()],
-                    timeout,
+                    timeout_ms,
                 )? {
                     self.buffer
                         .extend_from_slice(&buf[..amount])
@@ -313,18 +312,14 @@ impl<'a, B: SerialReadTimeout> Decoder<'a, B> {
         Ok(())
     }
 
-    fn read_exact(
-        &mut self,
-        buf: &mut [u8],
-        timeout: Milliseconds,
-    ) -> Result<(), Error<B::SerialError>> {
+    fn read_exact(&mut self, buf: &mut [u8], timeout_ms: u32) -> Result<(), Error<B::SerialError>> {
         if !self.buffer.is_empty() {
             let len = core::cmp::min(self.buffer.len(), buf.len());
             buf[..len].copy_from_slice(&self.buffer[..len]);
-            if len < buf.len() && self.read.read_exact(&mut buf[len..], timeout)?.is_none() {
+            if len < buf.len() && self.read.read_exact(&mut buf[len..], timeout_ms)?.is_none() {
                 return Err(crate::Error::Timeout);
             }
-        } else if self.read.read_exact(buf, timeout)?.is_none() {
+        } else if self.read.read_exact(buf, timeout_ms)?.is_none() {
             return Err(crate::Error::Timeout);
         }
 

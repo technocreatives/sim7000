@@ -21,18 +21,18 @@ pub enum CopyResult {
 impl AtDecode for CopyResult {
     fn decode<B: crate::SerialReadTimeout>(
         decoder: &mut super::Decoder<B>,
-        timeout: embedded_time::duration::Milliseconds,
+        timeout_ms: u32,
     ) -> Result<Self, Error<B::SerialError>> {
-        decoder.expect_str("+CGNSCPY: ", timeout)?;
+        decoder.expect_str("+CGNSCPY: ", timeout_ms)?;
 
-        let result = match decoder.decode_scalar(timeout)? {
+        let result = match decoder.decode_scalar(timeout_ms)? {
             0 => CopyResult::Success,
             1 => CopyResult::FileMissing,
             _ => return Err(Error::DecodingFailed),
         };
 
         decoder.end_line();
-        decoder.expect_str("OK", timeout)?;
+        decoder.expect_str("OK", timeout_ms)?;
 
         Ok(result)
     }

@@ -1,6 +1,5 @@
 use super::{AtCommand, AtDecode, AtExecute, Decoder};
 use crate::{Error, SerialReadTimeout};
-use embedded_time::duration::Milliseconds;
 
 pub struct Cipstatus;
 
@@ -53,13 +52,13 @@ impl TryFrom<&str> for ConnectionState {
 impl AtDecode for ConnectionState {
     fn decode<B: SerialReadTimeout>(
         decoder: &mut Decoder<B>,
-        timeout: Milliseconds,
+        timeout_ms: u32,
     ) -> Result<Self, Error<B::SerialError>> {
-        decoder.expect_str("OK", timeout)?;
+        decoder.expect_str("OK", timeout_ms)?;
         decoder.end_line();
 
-        decoder.expect_str("STATE: ", timeout)?;
-        let state = ConnectionState::try_from(decoder.remainder_str(timeout)?)
+        decoder.expect_str("STATE: ", timeout_ms)?;
+        let state = ConnectionState::try_from(decoder.remainder_str(timeout_ms)?)
             .map_err(|_| crate::Error::DecodingFailed)?;
 
         Ok(state)

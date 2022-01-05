@@ -36,15 +36,15 @@ impl AtEncode for CgnsmodParam {
 impl AtDecode for CgnsmodParam {
     fn decode<B: crate::SerialReadTimeout>(
         decoder: &mut super::Decoder<B>,
-        timeout: embedded_time::duration::Milliseconds,
+        timeout_ms: u32,
     ) -> Result<Self, Error<B::SerialError>> {
-        let _ = decoder.decode_scalar(timeout)?;
-        decoder.expect_str(",", timeout)?;
-        let enable_glonass = decoder.decode_scalar(timeout)? == 1;
-        decoder.expect_str(",", timeout)?;
-        let enable_beidou = decoder.decode_scalar(timeout)? == 1;
-        decoder.expect_str(",", timeout)?;
-        let enable_galilean = decoder.decode_scalar(timeout)? == 1;
+        let _ = decoder.decode_scalar(timeout_ms)?;
+        decoder.expect_str(",", timeout_ms)?;
+        let enable_glonass = decoder.decode_scalar(timeout_ms)? == 1;
+        decoder.expect_str(",", timeout_ms)?;
+        let enable_beidou = decoder.decode_scalar(timeout_ms)? == 1;
+        decoder.expect_str(",", timeout_ms)?;
+        let enable_galilean = decoder.decode_scalar(timeout_ms)? == 1;
 
         Ok(CgnsmodParam {
             enable_glonass,

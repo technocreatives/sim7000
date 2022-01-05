@@ -1,5 +1,3 @@
-use embedded_time::duration::Milliseconds;
-
 use crate::{drain_relay, Error, SerialReadTimeout, SerialWrite};
 
 use super::{AtCommand, AtDecode, AtEncode, AtWrite, Decoder, Encoder};
@@ -29,26 +27,26 @@ pub struct NetworkReceiveResponse {
 impl AtDecode for NetworkReceiveResponse {
     fn decode<B: SerialReadTimeout>(
         decoder: &mut Decoder<B>,
-        timeout: Milliseconds,
+        timeout_ms: u32,
     ) -> Result<Self, Error<B::SerialError>> {
         // The datasheet makes it look like there can only be one +CIPRXGET response to an AT+CIPRXGET command,
         // but this is not the case. The sim7000 can respond with +CIPRXGET: 1 to indicate its still waiting to
         // receive data. +CIPRXGET: 2,... will come on a later line
         let recv_len = loop {
-            decoder.expect_str("+CIPRXGET: ", timeout)?;
+            decoder.expect_str("+CIPRXGET: ", timeout_ms)?;
 
-            let mode = decoder.decode_scalar(timeout)?;
+            let mode = decoder.decode_scalar(timeout_ms)?;
             match mode {
                 1 => {
                     decoder.end_line();
                 }
                 2 => {
-                    decoder.expect_str(",", timeout)?;
+                    decoder.expect_str(",", timeout_ms)?;
                     // According to the specification the amount to read should actually be the 3rd number.
                     // But the chip does not follow specification. The third number seems to be the amount
                     // remaining in the buffer, but not the amount that it will actually respond with on the
                     // UART.
-                    break decoder.decode_scalar(timeout)?;
+                    break decoder.decode_scalar(timeout_ms)?;
                 }
                 _ => return Err(crate::Error::DecodingFailed),
             }
@@ -60,11 +58,11 @@ impl AtDecode for NetworkReceiveResponse {
             .map_err(|_| Error::BufferOverflow)?;
 
         if recv_len > 0 {
-            decoder.read_exact(&mut buffer, timeout)?;
+            decoder.read_exact(&mut buffer, timeout_ms)?;
         }
 
         decoder.end_line();
-        decoder.expect_str("OK", timeout)?;
+        decoder.expect_str("OK", timeout_ms)?;
 
         Ok(NetworkReceiveResponse {
             mode: NetworkReceiveMode::GetBytes(recv_len as u16),
@@ -112,9 +110,9 @@ impl AtWrite<'_> for Ciprxget {
         &self,
         parameter: Self::Input,
         serial: &mut B,
-        timeout: Milliseconds,
+        timeout_ms: u32,
     ) -> Result<Self::Output, Error<B::SerialError>> {
-        drain_relay(serial, Milliseconds(0))?;
+        drain_relay(serial, 0)?;
 
         let mut encoder = Encoder::new(serial);
         encoder.encode_str(<Self as AtCommand>::COMMAND)?;
@@ -126,19 +124,18 @@ impl AtWrite<'_> for Ciprxget {
         let mut decoder = Decoder::new(serial);
 
         if parameter == NetworkReceiveMode::Disable || parameter == NetworkReceiveMode::Enable {
-            <() as AtDecode>::decode(&mut decoder, timeout)?;
+            <() as AtDecode>::decode(&mut decoder, timeout_ms)?;
             return Ok(NetworkReceiveResponse {
                 mode: parameter,
                 bytes: None,
             });
         }
-        Self::Output::decode(&mut decoder, timeout)
+        Self::Output::decode(&mut decoder, timeout_ms)
     }
 }
 
 #[cfg(test)]
 mod test {
-    use embedded_time::duration::Milliseconds;
 
     use crate::{commands::AtWrite, test::MockSerial};
 
@@ -153,11 +150,7 @@ mod test {
             .finalize();
 
         let response = Ciprxget
-            .write(
-                NetworkReceiveMode::GetBytes(4),
-                &mut mock,
-                Milliseconds(1000),
-            )
+            .write(NetworkReceiveMode::GetBytes(4), &mut mock, 1000)
             .unwrap();
 
         assert_eq!(response.bytes.unwrap(), b"1234")
@@ -175,11 +168,7 @@ mod test {
             .finalize();
 
         let response = Ciprxget
-            .write(
-                NetworkReceiveMode::GetBytes(4),
-                &mut mock,
-                Milliseconds(1000),
-            )
+            .write(NetworkReceiveMode::GetBytes(4), &mut mock, 1000)
             .unwrap();
 
         assert_eq!(response.bytes.unwrap(), &[0, 1, 2, 3])

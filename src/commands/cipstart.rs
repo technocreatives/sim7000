@@ -1,5 +1,3 @@
-use embedded_time::duration::Milliseconds;
-
 use crate::{Error, SerialReadTimeout, SerialWrite};
 
 use super::{AtCommand, AtDecode, AtEncode, AtWrite, ConnectionState, Decoder, Encoder};
@@ -40,20 +38,20 @@ pub enum ConnectionResult {
 impl AtDecode for ConnectionResult {
     fn decode<B: SerialReadTimeout>(
         decoder: &mut Decoder<B>,
-        timeout: Milliseconds,
+        timeout_ms: u32,
     ) -> Result<Self, Error<B::SerialError>> {
-        decoder.expect_str("OK", timeout)?;
+        decoder.expect_str("OK", timeout_ms)?;
         decoder.end_line();
 
-        let status = match decoder.remainder_str(timeout)? {
+        let status = match decoder.remainder_str(timeout_ms)? {
             "CONNECT OK" => ConnectionResult::Success,
             "ALREADY CONNECT" => ConnectionResult::Success,
             _ => {
-                decoder.expect_str("STATE: ", timeout)?;
-                let _ = ConnectionState::try_from(decoder.remainder_str(timeout)?)
+                decoder.expect_str("STATE: ", timeout_ms)?;
+                let _ = ConnectionState::try_from(decoder.remainder_str(timeout_ms)?)
                     .map_err(|_| crate::Error::DecodingFailed)?;
                 decoder.end_line();
-                decoder.expect_str("CONNECT FAIL", timeout)?;
+                decoder.expect_str("CONNECT FAIL", timeout_ms)?;
                 ConnectionResult::Failure
             }
         };

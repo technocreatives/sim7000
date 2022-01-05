@@ -1,5 +1,3 @@
-use embedded_time::duration::Milliseconds;
-
 use crate::{Error, SerialReadTimeout};
 
 use super::{AtCommand, AtDecode, AtRead, Decoder};
@@ -36,11 +34,11 @@ pub struct SystemInfo {
 impl AtDecode for SystemInfo {
     fn decode<B: SerialReadTimeout>(
         decoder: &mut Decoder<B>,
-        timeout: Milliseconds,
+        timeout_ms: u32,
     ) -> Result<Self, Error<B::SerialError>> {
-        decoder.expect_str("+CPSI: ", timeout)?;
+        decoder.expect_str("+CPSI: ", timeout_ms)?;
 
-        let mut components = decoder.remainder_str(timeout)?.split(',');
+        let mut components = decoder.remainder_str(timeout_ms)?.split(',');
 
         let system_mode = match components.next().ok_or(crate::Error::DecodingFailed)? {
             "NO SERVICE" => SystemMode::NoService,
@@ -62,9 +60,9 @@ impl AtDecode for SystemInfo {
         decoder.end_line();
 
         // The SIM7000 may respond with an extra empty line in GSM mode for no reason
-        match decoder.remainder_str(timeout)? {
+        match decoder.remainder_str(timeout_ms)? {
             "OK" => {
-                decoder.expect_str("OK", timeout)?;
+                decoder.expect_str("OK", timeout_ms)?;
                 return Ok(SystemInfo {
                     system_mode,
                     operation_mode,
@@ -76,7 +74,7 @@ impl AtDecode for SystemInfo {
             _ => return Err(Error::DecodingFailed),
         }
 
-        decoder.expect_str("OK", timeout)?;
+        decoder.expect_str("OK", timeout_ms)?;
 
         Ok(SystemInfo {
             system_mode,
@@ -91,7 +89,6 @@ impl AtRead for Cpsi {
 
 #[cfg(test)]
 mod test {
-    use embedded_time::duration::Milliseconds;
 
     use crate::{commands::AtRead, test::MockSerial};
 
@@ -106,7 +103,7 @@ mod test {
             .expect_read(b"\r\nOK\r\n")
             .finalize();
 
-        let response = Cpsi.read(&mut mock, Milliseconds(1000)).unwrap();
+        let response = Cpsi.read(&mut mock, 1000).unwrap();
 
         assert_eq!(
             response,
@@ -125,7 +122,7 @@ mod test {
             .expect_read(b"\r\nOK\r\n")
             .finalize();
 
-        let response = Cpsi.read(&mut mock, Milliseconds(1000)).unwrap();
+        let response = Cpsi.read(&mut mock, 1000).unwrap();
 
         assert_eq!(
             response,

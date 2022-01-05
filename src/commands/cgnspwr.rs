@@ -1,5 +1,3 @@
-use embedded_time::duration::Milliseconds;
-
 use crate::{Error, SerialReadTimeout, SerialWrite};
 
 use super::{AtCommand, AtDecode, AtEncode, AtRead, AtWrite, Decoder, Encoder};
@@ -20,12 +18,12 @@ pub enum PowerStatus {
 impl AtDecode for PowerStatus {
     fn decode<B: SerialReadTimeout>(
         decoder: &mut Decoder<B>,
-        timeout: Milliseconds,
+        timeout_ms: u32,
     ) -> Result<Self, Error<B::SerialError>> {
-        decoder.expect_str("+CGNSPWR: ", timeout)?;
+        decoder.expect_str("+CGNSPWR: ", timeout_ms)?;
 
         let mode = match decoder
-            .remainder_str(timeout)?
+            .remainder_str(timeout_ms)?
             .parse::<i32>()
             .map_err(|_| crate::Error::DecodingFailed)?
         {
@@ -35,7 +33,7 @@ impl AtDecode for PowerStatus {
         };
 
         decoder.end_line();
-        decoder.expect_str("OK", timeout)?;
+        decoder.expect_str("OK", timeout_ms)?;
 
         Ok(mode)
     }

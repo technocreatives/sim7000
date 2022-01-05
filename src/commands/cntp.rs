@@ -64,15 +64,15 @@ pub enum CntpResponse {
 impl AtDecode for CntpResponse {
     fn decode<B: crate::SerialReadTimeout>(
         decoder: &mut super::Decoder<B>,
-        timeout: embedded_time::duration::Milliseconds,
+        timeout_ms: u32,
     ) -> Result<Self, crate::Error<B::SerialError>> {
-        decoder.expect_str("OK", timeout)?;
+        decoder.expect_str("OK", timeout_ms)?;
         decoder.end_line();
 
-        Ok(match decoder.decode_scalar(timeout)? {
+        Ok(match decoder.decode_scalar(timeout_ms)? {
             1 => {
-                decoder.expect_str(",", timeout)?;
-                let time = decoder.remainder_str(timeout)?.into();
+                decoder.expect_str(",", timeout_ms)?;
+                let time = decoder.remainder_str(timeout_ms)?.into();
                 CntpResponse::Success(time)
             }
             61 => CntpResponse::NetworkError,

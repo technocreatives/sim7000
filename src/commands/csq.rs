@@ -1,7 +1,6 @@
 use crate::{Error, SerialReadTimeout};
 
 use super::{AtCommand, AtDecode, AtExecute, Decoder};
-use embedded_time::duration::Milliseconds;
 
 pub struct Csq;
 
@@ -22,11 +21,11 @@ pub struct SignalDiagnostics {
 impl AtDecode for SignalDiagnostics {
     fn decode<B: SerialReadTimeout>(
         decoder: &mut Decoder<B>,
-        timeout: Milliseconds,
+        timeout_ms: u32,
     ) -> Result<Self, Error<B::SerialError>> {
-        decoder.expect_str("+CSQ: ", timeout)?;
+        decoder.expect_str("+CSQ: ", timeout_ms)?;
 
-        let rssi = match decoder.decode_scalar(timeout)? {
+        let rssi = match decoder.decode_scalar(timeout_ms)? {
             0 => Some(-115),
             1 => Some(-111),
             lookup if lookup <= 31 => Some(-110 + (lookup - 2) * 2),
@@ -38,9 +37,9 @@ impl AtDecode for SignalDiagnostics {
             let normalized_rssi = rssi + 115;
             100.0 * (normalized_rssi as f32 / 63f32)
         });
-        decoder.expect_str(",", timeout)?;
+        decoder.expect_str(",", timeout_ms)?;
 
-        let bit_error_rate = match decoder.decode_scalar(timeout)? {
+        let bit_error_rate = match decoder.decode_scalar(timeout_ms)? {
             0 => Some(0.14f32),
             1 => Some(0.28f32),
             2 => Some(0.57f32),
@@ -63,7 +62,7 @@ impl AtDecode for SignalDiagnostics {
 
         decoder.end_line();
 
-        decoder.expect_str("OK", timeout)?;
+        decoder.expect_str("OK", timeout_ms)?;
 
         Ok(SignalDiagnostics {
             signal_strength,

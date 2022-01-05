@@ -1,7 +1,5 @@
 use std::collections::VecDeque;
 
-use embedded_time::duration::Milliseconds;
-
 use crate::{Serial, SerialReadTimeout, SerialWrite};
 
 pub struct MockSerial {
@@ -55,10 +53,10 @@ impl SerialReadTimeout for MockSerial {
     fn read_exact(
         &mut self,
         buf: &mut [u8],
-        timeout: embedded_time::duration::Milliseconds,
+        timeout_ms: u32,
     ) -> Result<Option<()>, Self::SerialError> {
         // hack for draining echoes
-        if timeout <= Milliseconds(200u32) {
+        if timeout_ms <= 200u32 {
             return Ok(None);
         }
 
@@ -84,10 +82,10 @@ impl SerialReadTimeout for MockSerial {
     fn read(
         &mut self,
         buf: &mut [u8],
-        timeout: Milliseconds,
+        timeout_ms: u32,
     ) -> Result<Option<usize>, Self::SerialError> {
         // hack for draining echoes
-        if timeout <= Milliseconds(200u32) {
+        if timeout_ms <= 200u32 {
             return Ok(None);
         }
 

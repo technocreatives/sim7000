@@ -1,5 +1,3 @@
-use embedded_time::duration::Milliseconds;
-
 use crate::{Error, SerialReadTimeout, SerialWrite};
 
 use super::{AtCommand, AtDecode, AtEncode, AtRead, AtWrite, Decoder, Encoder};
@@ -38,11 +36,11 @@ pub struct RegistrationResponse {
 impl AtDecode for RegistrationResponse {
     fn decode<B: SerialReadTimeout>(
         decoder: &mut Decoder<B>,
-        timeout: Milliseconds,
+        timeout_ms: u32,
     ) -> Result<Self, Error<B::SerialError>> {
-        decoder.expect_str("+CGREG: ", timeout)?;
+        decoder.expect_str("+CGREG: ", timeout_ms)?;
 
-        let mode = match decoder.decode_scalar(timeout)? {
+        let mode = match decoder.decode_scalar(timeout_ms)? {
             0 => RegistrationMode::Disable,
             1 => RegistrationMode::EnableReg,
             2 => RegistrationMode::EnableRegLac,
@@ -50,8 +48,8 @@ impl AtDecode for RegistrationResponse {
             _ => return Err(crate::Error::DecodingFailed),
         };
 
-        decoder.expect_str(",", timeout)?;
-        let stat = match decoder.decode_scalar(timeout)? {
+        decoder.expect_str(",", timeout_ms)?;
+        let stat = match decoder.decode_scalar(timeout_ms)? {
             0 => RegistrationStatus::NotRegistered,
             1 => RegistrationStatus::RegisteredHome,
             2 => RegistrationStatus::Searching,
@@ -62,7 +60,7 @@ impl AtDecode for RegistrationResponse {
         };
 
         decoder.end_line();
-        decoder.expect_str("OK", timeout)?;
+        decoder.expect_str("OK", timeout_ms)?;
 
         Ok(RegistrationResponse { mode, stat })
     }

@@ -38,12 +38,12 @@ pub struct HttpResponse {
 impl AtDecode for HttpResponse {
     fn decode<B: crate::SerialReadTimeout>(
         decoder: &mut super::Decoder<B>,
-        timeout: embedded_time::duration::Milliseconds,
+        timeout_ms: u32,
     ) -> Result<Self, crate::Error<B::SerialError>> {
-        decoder.expect_str("+HTTPTOFS: ", timeout)?;
-        let status = decoder.decode_scalar(timeout)? as u16;
-        decoder.expect_str(",", timeout)?;
-        let len = decoder.decode_scalar(timeout)? as u32;
+        decoder.expect_str("+HTTPTOFS: ", timeout_ms)?;
+        let status = decoder.decode_scalar(timeout_ms)? as u16;
+        decoder.expect_str(",", timeout_ms)?;
+        let len = decoder.decode_scalar(timeout_ms)? as u32;
 
         Ok(HttpResponse { status, len })
     }

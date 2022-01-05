@@ -1,7 +1,6 @@
 #![cfg_attr(not(test), no_std)]
 
 use commands::{AtExecute, AtRead, AtWrite};
-use embedded_time::duration::Milliseconds;
 
 pub mod commands;
 pub mod tcp_client;
@@ -32,14 +31,11 @@ pub trait SerialReadTimeout: Serial {
     fn read_exact(
         &mut self,
         buf: &mut [u8],
-        timeout: Milliseconds,
+        timeout_ms: u32,
     ) -> Result<Option<()>, Self::SerialError>;
 
-    fn read(
-        &mut self,
-        buf: &mut [u8],
-        timeout: Milliseconds,
-    ) -> Result<Option<usize>, Self::SerialError>;
+    fn read(&mut self, buf: &mut [u8], timeout_ms: u32)
+        -> Result<Option<usize>, Self::SerialError>;
 }
 
 pub trait SerialWrite: Serial {
@@ -50,30 +46,30 @@ pub trait AtModem: SerialWrite + SerialReadTimeout {
     fn read<C: AtRead>(
         &mut self,
         command: C,
-        timeout: Milliseconds,
+        timeout_ms: u32,
     ) -> Result<C::Output, Error<Self::SerialError>>;
 
     fn write<'a, C: AtWrite<'a>>(
         &mut self,
         command: C,
         param: C::Input,
-        timeout: Milliseconds,
+        timeout_ms: u32,
     ) -> Result<C::Output, Error<Self::SerialError>>;
 
     fn execute<C: AtExecute>(
         &mut self,
         command: C,
-        timeout: Milliseconds,
+        timeout_ms: u32,
     ) -> Result<C::Output, Error<Self::SerialError>>;
 }
 
-fn drain_relay<T>(relay: &mut T, mut timeout: Milliseconds) -> Result<(), T::SerialError>
+fn drain_relay<T>(relay: &mut T, mut timeout_ms: u32) -> Result<(), T::SerialError>
 where
     T: SerialReadTimeout,
 {
     let mut recv_buf = [0u8; 1];
     loop {
-        let res = relay.read_exact(&mut recv_buf, timeout);
+        let res = relay.read_exact(&mut recv_buf, timeout_ms);
         match res {
             Err(error) => return Err(error),
             Ok(None) => return Ok(()),
@@ -83,6 +79,6 @@ where
         };
 
         // All subsequent loops should have a timeout of 0 so they never block
-        timeout = Milliseconds(0);
+        timeout_ms = 0;
     }
 }
