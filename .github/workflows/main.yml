@@ -1,14 +1,14 @@
 # This is a basic workflow to help you get started with Actions
 
-name: CI
+name: Tests / Lint / Coverage
 
 on:
-  push:
-    branches: [ main ]
-  pull_request:
-    branches: [ main ]
-
-  workflow_dispatch:
+   push:
+     branches:
+     - "**"
+   pull_request:
+     branches:
+     - "**"
 
 jobs:
   check:
