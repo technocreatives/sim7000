@@ -60,9 +60,18 @@ impl GnssResponse {
         let course_over_ground = results.next().and_then(|v| v.parse::<f32>().ok())?;
         let _fix_mode = results.next()?;
         let _reserved1 = results.next()?;
-        let hdop = results.next().and_then(|v| v.parse::<f32>().ok())?;
-        let pdop = results.next().and_then(|v| v.parse::<f32>().ok())?;
-        let vdop = results.next().and_then(|v| v.parse::<f32>().ok())?;
+        let hdop = results
+            .next()
+            .and_then(|v| v.parse::<f32>().ok())
+            .unwrap_or(0.0);
+        let pdop = results
+            .next()
+            .and_then(|v| v.parse::<f32>().ok())
+            .unwrap_or(0.0);
+        let vdop = results
+            .next()
+            .and_then(|v| v.parse::<f32>().ok())
+            .unwrap_or(0.0);
         let _reserved2 = results.next()?;
         let sat_gps_view = results.next().and_then(|v| v.parse::<u32>().ok())?;
         let sat_gnss_used = results.next().and_then(|v| v.parse::<u32>().ok())?;
@@ -129,6 +138,30 @@ mod test {
             sat_gnss_used: 6,
             sat_glonass_used: 0,
             signal_noise_ratio: 45,
+        };
+
+        assert_eq!(expected, gnss);
+    }
+
+    #[test]
+    fn test_missing_dop() {
+        let gnss_str =
+            "1,1,20220126140944.000,57.715185,11.973960,44.600,0.00,214.5,1,,1.4,,,,29,5,,,52,,";
+        let gnss = GnssResponse::decode_cgnsinf(gnss_str).unwrap();
+
+        let expected = GnssResponse::Fix {
+            latitude: 57.715185,
+            longitude: 11.973960,
+            altitude: 44.6,
+            hdop: 1.4,
+            pdop: 0.0,
+            vdop: 0.0,
+            speed_over_ground: 0.0,
+            course_over_ground: 214.5,
+            sat_gps_view: 29,
+            sat_gnss_used: 5,
+            sat_glonass_used: 0,
+            signal_noise_ratio: 52,
         };
 
         assert_eq!(expected, gnss);
