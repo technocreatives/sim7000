@@ -1,0 +1,14 @@
+[package]
+name = "sim7000"
+version = "0.1.0"
+authors = ["Zoey Riordan <zoey@dos.cafe>"]
+description = "Drivers for the SIM7000 series of chips"
+license = "Apache-2.0 OR MIT"
+repository = "https://github.com/technocreatives/sim7000"
+
+edition = "2021"
+
+[dependencies]
+heapless = "0.7"
+spin = {version = "0.9", default-features = false, features = ["once"] }
+log = "0.4"

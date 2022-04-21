@@ -1,0 +1,68 @@
+use core::future::Future;
+
+use heapless::{String, Vec};
+
+use crate::{Error, SerialError};
+
+pub trait Read: SerialError {
+    /// Future returned by the `read` method.
+    type ReadFuture<'a>: Future<Output = Result<usize, Self::Error>> + 'a
+    where
+        Self: 'a;
+
+    type ReadExactFuture<'a>: Future<Output = Result<(), Self::Error>> + 'a
+    where
+        Self: 'a;
+
+    fn read_exact<'a>(&'a mut self, buf: &'a mut [u8]) -> Self::ReadExactFuture<'a>;
+
+    /// Reads words from the serial interface into the supplied slice.
+    fn read<'a>(&'a mut self, read: &'a mut [u8]) -> Self::ReadFuture<'a>;
+}
+
+pub struct ModemReader<R> {
+    read: R,
+    buffer: Vec<u8, 256>,
+}
+
+impl<R: Read> ModemReader<R> {
+    pub fn new(read: R) -> ModemReader<R> {
+        ModemReader { read, buffer: Vec::new() }
+    }
+    
+    pub async fn read_line(&mut self) -> Result<String<256>, Error<R::Error>> {
+        loop {
+            log::trace!("CURRENT BUFFER {:?}", core::str::from_utf8(&self.buffer));
+            if let Some(position) = self.buffer.windows(2).position(|slice| slice == b"\r\n") {
+                self.buffer.rotate_left(position);
+                self.buffer.truncate(self.buffer.len() - position);
+
+                if let Some(position) = self.buffer[2..]
+                    .windows(2)
+                    .position(|slice| slice == b"\r\n")
+                {
+                    let line_end = position + 2;
+                    let s = core::str::from_utf8(&self.buffer[2..line_end])
+                        .map_err(|_| Error::InvalidUtf8)?;
+                    log::trace!("RECV LINE: {:?}", s);
+                    let line = heapless::String::from(s);
+
+                    self.buffer.rotate_left(line_end + 2);
+                    self.buffer.truncate(self.buffer.len() - (line_end + 2));
+
+                    return Ok(line);
+                }
+            }
+
+            let mut buf = [0u8; 256];
+            let amount = self
+                .read
+                .read(&mut buf[..self.buffer.capacity() - self.buffer.len()])
+                .await?;
+
+            self.buffer
+                .extend_from_slice(&buf[..amount])
+                .map_err(|_| Error::BufferOverflow)?;
+        }
+    }
+}
