@@ -1,9 +1,9 @@
-use embassy::{blocking_mutex::raw::CriticalSectionRawMutex, channel::Sender};
+use embassy::{blocking_mutex::raw::CriticalSectionRawMutex, channel::{Sender, Receiver}};
 use embedded_hal::digital::blocking::OutputPin;
 use heapless::{Vec, String};
 use core::fmt::Write as FmtWrite;
 
-use crate::{read::{Read, ModemReader}, ModemContext, Error, ModemPower, PowerState, write::Write};
+use crate::{read::{Read, ModemReader}, ModemContext, Error, ModemPower, PowerState, write::Write, RegistrationStatus};
 
 pub struct Modem<'c, P, W> {
     context: &'c ModemContext,
@@ -66,14 +66,6 @@ impl<'c, P: ModemPower, W: Write> Modem<'c, P, W> {
     }
 }
 
-enum ModemState {
-    Disabled,
-    Sleeping,
-    Errored,
-    Initializing,
-    Running
-}
-
 pub struct RxPump<'context, R> {
     reader: ModemReader<R>,
     generic_response: Sender<'context, CriticalSectionRawMutex, heapless::String<256>, 1>,
@@ -92,4 +84,18 @@ impl<'context, R: Read> RxPump<'context, R> {
 pub struct TxPump<'context, W> {
     writer: W,
     messages: Receiver<'context, CriticalSectionRawMutex, heapless::String<256>, 8>,
+}
+
+pub struct RegistrationHandler<'context> {
+    context: &'context ModemContext,
+}
+
+impl<'context> RegistrationHandler<'context> {
+    pub async fn pump(&mut self) {
+        match self.context.registration_events.wait().await {
+            RegistrationStatus::NotRegistered | RegistrationStatus::Searching | RegistrationStatus::RegistrationDenied | RegistrationStatus::Unknown => todo!(),
+            RegistrationStatus::RegisteredHome => todo!(),
+            RegistrationStatus::RegisteredRoaming => todo!(),
+        }
+    }
 }

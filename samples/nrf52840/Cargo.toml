@@ -1,0 +1,14 @@
+[package]
+name = "nrf52840"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+embassy = { version = "0.1.0", git = "https://github.com/embassy-rs/embassy", branch = "master", features = ["time"] }
+embassy-nrf = { version = "0.1.0", git = "https://github.com/embassy-rs/embassy", branch = "master", features = ["nightly", "nrf52840", "time-driver-rtc1"] }
+panic-reset = "0.1.0"
+rtt-target = { version = "0.3.0", features = ["cortex-m"] }
+cortex-m = "0.7.3"
+cortex-m-rt = "0.7.0"

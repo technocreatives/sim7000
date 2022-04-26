@@ -8,7 +8,7 @@ pub mod modem;
 use core::future::Future;
 use embassy::{
     blocking_mutex::raw::CriticalSectionRawMutex,
-    channel::Channel,
+    channel::{Channel, Signal},
 };
 use embedded_hal::digital::blocking::OutputPin;
 use embedded_hal_async::digital::Wait;
@@ -30,9 +30,20 @@ impl<S: core::fmt::Debug> From<S> for Error<S> {
     }
 }
 
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+pub enum RegistrationStatus {
+    NotRegistered,
+    RegisteredHome,
+    Searching,
+    RegistrationDenied,
+    Unknown,
+    RegisteredRoaming,
+}
+
 pub struct ModemContext {
     generic_response: Channel<CriticalSectionRawMutex, heapless::String<256>, 1>,
     tcp_1_channel: Channel<CriticalSectionRawMutex, heapless::Vec<u8, 256>, 2>,
+    registration_events: Signal<RegistrationStatus>,
 }
 
 
