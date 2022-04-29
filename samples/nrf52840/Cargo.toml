@@ -12,3 +12,5 @@ panic-reset = "0.1.0"
 rtt-target = { version = "0.3.0", features = ["cortex-m"] }
 cortex-m = "0.7.3"
 cortex-m-rt = "0.7.0"
+futures = { version = "0.3.17", default-features = false }
+sim7000-async = { path = "../../sim7000-async" }

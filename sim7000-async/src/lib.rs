@@ -46,6 +46,12 @@ pub struct ModemContext {
     registration_events: Signal<RegistrationStatus>,
 }
 
+impl ModemContext {
+    pub const fn new() -> Self {
+        ModemContext { generic_response: Channel::new(), tcp_1_channel: Channel::new(), registration_events: Signal::new() }
+    }
+}
+
 
 #[derive(PartialEq, Eq)]
 pub enum PowerState {
