@@ -1,5 +1,6 @@
 #![no_std]
 #![feature(generic_associated_types)]
+#![feature(type_alias_impl_trait)]
 
 pub mod read;
 pub mod write;
@@ -22,6 +23,7 @@ pub enum Error<S: core::fmt::Debug> {
     InvalidUtf8,
     SerialError(S),
     BufferOverflow,
+    Timeout
 }
 
 impl<S: core::fmt::Debug> From<S> for Error<S> {
@@ -78,10 +80,10 @@ pub trait ModemPower {
         Self: 'a;
     fn enable<'a>(&'a mut self) -> Self::EnableFuture<'a>;
     fn disable<'a>(&'a mut self) -> Self::DisableFuture<'a>;
-    fn sleep<'a>(&mut self) -> Self::SleepFuture<'a>;
-    fn wake<'a>(&mut self) -> Self::WakeFuture<'a>;
-    fn reset<'a>(&mut self) -> Self::ResetFuture<'a>;
-    fn state<'a>(&mut self) -> PowerState;
+    fn sleep<'a>(&'a mut self) -> Self::SleepFuture<'a>;
+    fn wake<'a>(&'a mut self) -> Self::WakeFuture<'a>;
+    fn reset<'a>(&'a mut self) -> Self::ResetFuture<'a>;
+    fn state<'a>(&'a mut self) -> PowerState;
 }
 
 // cliff notes: one in flight command at a time, control via one-shots and signals. For getting data instead favor URCs that continually spam data

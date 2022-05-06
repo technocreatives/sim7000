@@ -8,9 +8,10 @@ edition = "2021"
 [dependencies]
 embassy = { version = "0.1.0", git = "https://github.com/embassy-rs/embassy", branch = "master", features = ["time"] }
 embassy-nrf = { version = "0.1.0", git = "https://github.com/embassy-rs/embassy", branch = "master", features = ["nightly", "nrf52840", "time-driver-rtc1"] }
-panic-reset = "0.1.0"
+panic-rtt-target = { version = "0.1.1", features = ["cortex-m"] }
 rtt-target = { version = "0.3.0", features = ["cortex-m"] }
 cortex-m = "0.7.3"
 cortex-m-rt = "0.7.0"
 futures = { version = "0.3.17", default-features = false }
 sim7000-async = { path = "../../sim7000-async" }
+log = "0.4"
