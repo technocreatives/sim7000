@@ -1,4 +1,4 @@
-use core::future::Future;
+use core::{future::Future};
 
 use heapless::{String, Vec};
 
@@ -45,6 +45,14 @@ impl<R: Read> ModemReader<R> {
                     let s = core::str::from_utf8(&self.buffer[2..line_end])
                         .map_err(|_| Error::InvalidUtf8)?;
                     log::trace!("RECV LINE: {:?}", s);
+                    
+                    // the sim7000 doesn't remember hardware flow control settings so during initialization it might drop bytes. This will fix a misaligned line reader since the sim7000 never sends empty messages
+                    if s.is_empty() {
+                        self.buffer.rotate_left(line_end);
+                        self.buffer.truncate(self.buffer.len() - line_end);
+
+                        continue;
+                    }
                     let line = heapless::String::from(s);
 
                     self.buffer.rotate_left(line_end + 2);
@@ -52,6 +60,10 @@ impl<R: Read> ModemReader<R> {
 
                     return Ok(line);
                 }
+            }
+
+            if self.buffer.capacity() - self.buffer.len() == 0 {
+                panic!();
             }
 
             let mut buf = [0u8; 256];
@@ -64,5 +76,19 @@ impl<R: Read> ModemReader<R> {
                 .extend_from_slice(&buf[..amount])
                 .map_err(|_| Error::BufferOverflow)?;
         }
+    }
+
+    pub async fn read_exact(&mut self, buf: &mut [u8]) -> Result<(), Error<R::Error>> {
+        if self.buffer.len() >= buf.len() {
+            buf.copy_from_slice(&self.buffer.as_slice()[..buf.len()]);
+            self.buffer.rotate_left(buf.len());
+            self.buffer.truncate(self.buffer.len() - buf.len())
+        } else {
+            buf[..self.buffer.len()].copy_from_slice(self.buffer.as_slice());
+            self.read.read_exact(&mut buf[self.buffer.len()..]).await?;
+            self.buffer.clear();
+        }
+
+        Ok(())
     }
 }

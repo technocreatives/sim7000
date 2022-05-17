@@ -1,14 +1,16 @@
-use embassy::{blocking_mutex::raw::CriticalSectionRawMutex, channel::{Sender, Receiver, Signal}, time::{Duration, Timer}};
+mod context;
+
+use embassy::{blocking_mutex::raw::CriticalSectionRawMutex, channel::{Sender, Receiver, Signal}, time::{Duration, Timer}, mutex::Mutex};
 use embedded_hal::digital::blocking::OutputPin;
 use heapless::{Vec, String};
 use core::fmt::Write as FmtWrite;
 
-use crate::{read::{Read, ModemReader}, ModemContext, Error, ModemPower, PowerState, write::Write, RegistrationStatus};
+use crate::{read::{Read, ModemReader}, ModemContext, Error, ModemPower, PowerState, write::Write, RegistrationStatus, single_arc::SingletonArcGuard, tcp::TcpStream};
 
 pub struct Modem<'c, P, W> {
-    context: &'c ModemContext,
+    context: &'c ModemContext<W>,
     power: P,
-    tx: W,
+    tx: SingletonArcGuard<'c, Mutex<CriticalSectionRawMutex, W>>,
 }
 
 impl<'c, P: ModemPower, W: Write> Modem<'c, P, W> {
@@ -16,9 +18,11 @@ impl<'c, P: ModemPower, W: Write> Modem<'c, P, W> {
         rx: R,
         tx: W,
         power: P,
-        context: &'c ModemContext,
+        context: &'c ModemContext<W>,
     ) -> Result<(Modem<'c, P, W>, RxPump<'c, R>), Error<W::Error>> {
-        let mut modem = Modem { context, power, tx };
+        let tx = context.transmit.get_or_init(move || Mutex::new(tx));
+        
+        let modem = Modem { context, power, tx };
 
         let pump = RxPump {
             reader: ModemReader::new(rx),
@@ -36,7 +40,7 @@ impl<'c, P: ModemPower, W: Write> Modem<'c, P, W> {
 
         for _ in 0..5 {
             match embassy::time::with_timeout(Duration::from_millis(2000), async {
-                self.run_raw_command("ATE0\r").await
+                self.run_raw_command("AT+IFC=2,2\r").await
             }).await {
                 Ok(Ok(_)) => break,
                 _ => {}
@@ -66,18 +70,25 @@ impl<'c, P: ModemPower, W: Write> Modem<'c, P, W> {
         self.power.enable().await;
         for _ in 0..5 {
             match embassy::time::with_timeout(Duration::from_millis(2000), async {
-                self.run_raw_command("ATE0\r").await
+                self.run_raw_command("AT+IFC=2,2\r").await
             }).await {
                 Ok(Ok(_)) => break,
                 _ => {}
             }
         }
+        self.run_raw_command("ATE0\r").await?;
 
         self.run_raw_command("AT+CGREG=2\r").await?;
+        self.wait_for_registration().await?;
+        self.run_raw_command("AT+CIPMUX=1\r").await?;
+        self.run_raw_command("AT+CIPSPRT=0\r").await?;
+        self.run_raw_command("AT+CIPSHUT\r").await.unwrap();
+
+        self.authenticate().await?;
         Ok(())
     }
 
-    pub async fn wait_for_registration(&mut self) -> Result<(), Error<W::Error>> {
+    async fn wait_for_registration(&mut self) -> Result<(), Error<W::Error>> {
         loop {
             match embassy::time::with_timeout(Duration::from_millis(2000), async {
                 self.run_raw_command("AT+CGREG?\r").await
@@ -96,27 +107,52 @@ impl<'c, P: ModemPower, W: Write> Modem<'c, P, W> {
         Ok(())
     }
 
+    async fn authenticate(&mut self) -> Result<(), Error<W::Error>> {
+        self.run_raw_command("AT+CSTT=\"iot.1nce.net\",\"\",\"\"\r").await?;
+        self.run_raw_command("AT+CIICR\r").await?;
+
+        Ok(())
+    }
+
     pub async fn run_raw_command(&mut self, command: &str) -> Result<Vec<String<32>, 4>, Error<W::Error>> {
         log::info!("Sending command {}", command);
-        self.tx.write_all(command.as_bytes()).await?;
-        self.tx.flush().await?;
+        let mut tx = self.tx.lock().await;
+        tx.write_all(command.as_bytes()).await?;
+        tx.flush().await?;
 
         let mut responses = Vec::new();
         loop {
             match self.context.generic_response.recv().await.as_str() {
-                "OK" | "ERROR" => break,
-                res if res.starts_with("+CME ERROR") => break,
+                "OK" | "SHUT OK" => break,
+                res if res.starts_with("+CME ERROR") | "ERROR" => return Err(Error::SimError),
                 res => {responses.push(res.into());}
             }
         }
+        drop(tx);
         Ok(responses)
+    }
+
+    pub async fn connect_tcp(&mut self) -> TcpStream<'c, W> {
+        self.tx.lock().await.write_all(b"AT+CIFSR\r").await.unwrap();
+        self.run_raw_command("AT+CIPSTART=0,\"TCP\",\"example.com\",\"80\"\r").await.unwrap();
+        loop {
+            match self.context.generic_response.recv().await.as_str() {
+                "0, CONNECT OK" => break,
+                "0, CONNECT FAIL" => panic!(),
+                _ => {}
+            }
+        }
+        TcpStream {
+            instance: 0,
+            tx: self.tx.clone()
+        }
     }
 }
 
 pub struct RxPump<'context, R> {
     reader: ModemReader<R>,
     generic_response: Sender<'context, CriticalSectionRawMutex, heapless::String<256>, 1>,
-    tcp_1_channel: Sender<'context, CriticalSectionRawMutex, heapless::Vec<u8, 256>, 2>,
+    tcp_1_channel: Sender<'context, CriticalSectionRawMutex, heapless::Vec<u8, 365>, 8>,
     registration_events: &'context Signal<RegistrationStatus>,
 }
 
@@ -135,7 +171,18 @@ impl<'context, R: Read> RxPump<'context, R> {
                 _ => RegistrationStatus::NotRegistered,
             };
             self.registration_events.signal(stat);
-        } else {
+        } else if line.starts_with("+RECEIVE,") {
+            let mut length = line.split(&[',', ':']).nth(2).unwrap().parse::<usize>().unwrap();
+            while length > 0 {
+                log::debug!("remaining read: {}", length);
+                let mut buf = Vec::new();
+                buf.resize_default(usize::min(length, 365)).unwrap();
+                self.reader.read_exact(&mut buf).await?;
+                length -= buf.len();
+                self.tcp_1_channel.send(buf).await;
+            }
+        } 
+        else {
             match self.generic_response.try_send(line) {
                 Ok(_) => {},
                 Err(_) => log::info!("message queue full"),
@@ -145,18 +192,13 @@ impl<'context, R: Read> RxPump<'context, R> {
     }
 }
 
-pub struct TxPump<'context, W> {
-    writer: W,
-    messages: Receiver<'context, CriticalSectionRawMutex, heapless::String<256>, 8>,
-}
-
 pub struct RegistrationHandler<'context> {
-    context: &'context ModemContext,
+    context: &'context Signal<RegistrationStatus>,
 }
 
 impl<'context> RegistrationHandler<'context> {
     pub async fn pump(&mut self) {
-        match self.context.registration_events.wait().await {
+        match self.context.wait().await {
             RegistrationStatus::NotRegistered | RegistrationStatus::Searching | RegistrationStatus::RegistrationDenied | RegistrationStatus::Unknown => todo!(),
             RegistrationStatus::RegisteredHome => todo!(),
             RegistrationStatus::RegisteredRoaming => todo!(),

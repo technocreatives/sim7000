@@ -19,9 +19,9 @@ impl Log for Logger {
     fn log(&self, record: &Record) {
         use log::Level;
         use rtt_target::rprint;
-        if !self.enabled(record.metadata()) {
-            return;
-        }
+        // if !self.enabled(record.metadata()) {
+        //     return;
+        // }
         match record.level() {
             Level::Error => rprint!("[ERROR "),
             Level::Warn => rprint!("[WARN  "),
@@ -73,4 +73,3 @@ macro_rules! rtt_init_logger {
 pub fn set_level(level: LevelFilter) {
     log::set_max_level(level);
 }
-

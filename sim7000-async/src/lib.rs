@@ -5,14 +5,18 @@
 pub mod read;
 pub mod write;
 pub mod modem;
+pub mod tcp;
+pub mod single_arc;
 
-use core::future::Future;
+use core::{future::Future, sync::atomic::AtomicU8};
 use embassy::{
-    blocking_mutex::raw::CriticalSectionRawMutex,
+    mutex::Mutex,
+    blocking_mutex::{raw::CriticalSectionRawMutex},
     channel::{Channel, Signal},
 };
 use embedded_hal::digital::blocking::OutputPin;
 use embedded_hal_async::digital::Wait;
+use single_arc::SingletonArc;
 
 pub trait SerialError {
     type Error: core::fmt::Debug;
@@ -23,6 +27,7 @@ pub enum Error<S: core::fmt::Debug> {
     InvalidUtf8,
     SerialError(S),
     BufferOverflow,
+    SimError,
     Timeout
 }
 
@@ -42,17 +47,7 @@ pub enum RegistrationStatus {
     RegisteredRoaming,
 }
 
-pub struct ModemContext {
-    generic_response: Channel<CriticalSectionRawMutex, heapless::String<256>, 1>,
-    tcp_1_channel: Channel<CriticalSectionRawMutex, heapless::Vec<u8, 256>, 2>,
-    registration_events: Signal<RegistrationStatus>,
-}
 
-impl ModemContext {
-    pub const fn new() -> Self {
-        ModemContext { generic_response: Channel::new(), tcp_1_channel: Channel::new(), registration_events: Signal::new() }
-    }
-}
 
 
 #[derive(PartialEq, Eq)]
