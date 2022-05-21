@@ -12,8 +12,8 @@
       "sim7000/Cargo.toml",
       "sim7000-async/Cargo.toml",
     ],
-    "rust-analyzer.imports.granularity.enforce": true,
-    "rust-analyzer.imports.granularity.group": "crate",
-    "rust-analyzer.cargo.buildScripts.enable": true,
-    "rust-analyzer.procMacro.attributes.enable": false,
+    "rust-analyzer.assist.importEnforceGranularity": true,
+    "rust-analyzer.assist.importGranularity": "crate",
+    "rust-analyzer.experimental.procAttrMacros": false,
+    "rust-analyzer.cargo.runBuildScripts": true,
   }

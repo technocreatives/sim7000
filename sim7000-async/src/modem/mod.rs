@@ -5,8 +5,8 @@ use embedded_hal::digital::blocking::OutputPin;
 use heapless::{Vec, String};
 use core::fmt::Write as FmtWrite;
 
-use crate::{read::{Read, ModemReader}, ModemContext, Error, ModemPower, PowerState, write::Write, RegistrationStatus, single_arc::SingletonArcGuard, tcp::TcpStream};
-
+use crate::{read::{Read, ModemReader}, Error, ModemPower, PowerState, write::Write, RegistrationStatus, single_arc::SingletonArcGuard, tcp::TcpStream};
+pub use context::*;
 pub struct Modem<'c, P, W> {
     context: &'c ModemContext<W>,
     power: P,
@@ -114,7 +114,7 @@ impl<'c, P: ModemPower, W: Write> Modem<'c, P, W> {
         Ok(())
     }
 
-    pub async fn run_raw_command(&mut self, command: &str) -> Result<Vec<String<32>, 4>, Error<W::Error>> {
+    pub async fn run_raw_command(&self, command: &str) -> Result<Vec<String<32>, 4>, Error<W::Error>> {
         log::info!("Sending command {}", command);
         let mut tx = self.tx.lock().await;
         tx.write_all(command.as_bytes()).await?;
@@ -124,7 +124,8 @@ impl<'c, P: ModemPower, W: Write> Modem<'c, P, W> {
         loop {
             match self.context.generic_response.recv().await.as_str() {
                 "OK" | "SHUT OK" => break,
-                res if res.starts_with("+CME ERROR") | "ERROR" => return Err(Error::SimError),
+                "ERROR" => return Err(Error::SimError),
+                res if res.starts_with("+CME ERROR") => return Err(Error::SimError),
                 res => {responses.push(res.into());}
             }
         }
@@ -132,19 +133,27 @@ impl<'c, P: ModemPower, W: Write> Modem<'c, P, W> {
         Ok(responses)
     }
 
-    pub async fn connect_tcp(&mut self) -> TcpStream<'c, W> {
+    pub async fn connect_tcp(&mut self, host: &str, port: u16) -> TcpStream<'c, W> {
+        let tcp_context = self.context.tcp.claim().unwrap();
         self.tx.lock().await.write_all(b"AT+CIFSR\r").await.unwrap();
-        self.run_raw_command("AT+CIPSTART=0,\"TCP\",\"example.com\",\"80\"\r").await.unwrap();
+
+        let mut buf = heapless::String::<256>::new();
+        write!(buf, "AT+CIPSTART={},\"TCP\",\"{}\",\"{}\"\r", tcp_context.ordinal(), host, port).unwrap();
+        self.run_raw_command(buf.as_str()).await.unwrap();
+        
         loop {
-            match self.context.generic_response.recv().await.as_str() {
-                "0, CONNECT OK" => break,
-                "0, CONNECT FAIL" => panic!(),
+            match tcp_context.events().recv().await {
+                crate::tcp::TcpMessage::Connected => break,
+                crate::tcp::TcpMessage::ConnectionFailed => panic!(),
                 _ => {}
             }
         }
+
         TcpStream {
-            instance: 0,
-            tx: self.tx.clone()
+            token: tcp_context,
+            tx: self.tx.clone(),
+            closed: false,
+            buffer: Vec::new(),
         }
     }
 }
@@ -181,7 +190,34 @@ impl<'context, R: Read> RxPump<'context, R> {
                 length -= buf.len();
                 self.tcp_1_channel.send(buf).await;
             }
-        } 
+        } else if line.ends_with(",CLOSED") {
+            let connection = line.split(&[',']).nth(0).unwrap().parse::<usize>().unwrap();
+            match connection {
+                0 => {},
+                1 => {},
+                2 => {},
+                3 => {},
+                _ => panic!(),
+            }
+        } else if line.ends_with(",SEND OK") {
+            let connection = line.split(&[',']).nth(0).unwrap().parse::<usize>().unwrap();
+            match connection {
+                0 => {},
+                1 => {},
+                2 => {},
+                3 => {},
+                _ => panic!(),
+            }
+        } else if line.ends_with(",SEND FAIL") {
+            let connection = line.split(&[',']).nth(0).unwrap().parse::<usize>().unwrap();
+            match connection {
+                0 => {},
+                1 => {},
+                2 => {},
+                3 => {},
+                _ => panic!(),
+            }
+        }
         else {
             match self.generic_response.try_send(line) {
                 Ok(_) => {},

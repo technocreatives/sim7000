@@ -15,7 +15,3 @@ cortex-m-rt = "0.7.0"
 futures = { version = "0.3.17", default-features = false }
 sim7000-async = { path = "../../sim7000-async" }
 log = "0.4"
-
-[patch."https://github.com/embassy-rs/embassy"]
-embassy = { path = "../../../../embassy/embassy" }
-embassy-nrf = { path = "../../../../embassy/embassy-nrf" }

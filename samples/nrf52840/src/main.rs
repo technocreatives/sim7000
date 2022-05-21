@@ -14,9 +14,9 @@ use embassy_nrf::{
 };
 use rtt_target::{rprintln, rtt_init_print};
 use sim7000_async::{
-    modem::{Modem, RxPump},
+    modem::{Modem, ModemContext, RxPump},
     write::Write,
-    ModemContext, ModemPower, PowerState,
+    ModemPower, PowerState,
 };
 
 extern crate panic_rtt_target;
