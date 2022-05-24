@@ -16,7 +16,7 @@ use rtt_target::{rprintln, rtt_init_print};
 use sim7000_async::{
     modem::{Modem, ModemContext, RxPump},
     write::Write,
-    ModemPower, PowerState,
+    ModemPower, PowerState, read::Read,
 };
 
 extern crate panic_rtt_target;
@@ -26,7 +26,7 @@ static MODEM_CONTEXT: ModemContext<AppUarteWrite<'static>> = ModemContext::new()
 #[embassy::main]
 async fn main(spawner: Spawner, p: Peripherals) {
     rtt_init_logger!(BlockIfFull);
-    logger::set_level(LevelFilter::Trace);
+    logger::set_level(LevelFilter::Debug);
     let irq = interrupt::take!(UARTE0_UART0);
     let mut config = uarte::Config::default();
     config.parity = uarte::Parity::EXCLUDED;
@@ -56,10 +56,22 @@ async fn main(spawner: Spawner, p: Peripherals) {
     modem.activate().await.unwrap();
     Timer::after(Duration::from_millis(5000)).await;
 
-    let mut tcp = modem.connect_tcp().await;
-    tcp.write_all(b"GET / HTTP/1.1\r\nHost: example.com\r\nConnection: close\r\n\r\n")
+    let mut tcp = modem.connect_tcp("tcpbin.com", 4242).await;
+    tcp.write_all(b"\r\nFOOBARBAZBOPSHOP\r\n")
         .await
         .unwrap();
+        rprintln!("READING");
+        
+    let mut buf = [0u8; 128];
+    loop {
+        let amount = tcp.read(&mut buf).await.unwrap();
+        if amount == 0 {
+            break;
+        }
+
+        rprintln!("{}", core::str::from_utf8(&buf[..amount]).unwrap());
+
+    }
     loop {
         Timer::after(Duration::from_millis(300)).await;
         rprintln!("PING");
@@ -103,8 +115,14 @@ impl<'d> sim7000_async::read::Read for AppUarteRead<'d> {
 
     fn read<'a>(&'a mut self, read: &'a mut [u8]) -> Self::ReadFuture<'a> {
         async move {
-            let result = self.0.read_until_idle(read).await;
-            result
+            rprintln!("READ UNTIL IDLE");
+            let result = match embassy::time::with_timeout(Duration::from_millis(1000), self.0.read_until_idle(read)).await {
+                Ok(Ok(result)) => result,
+                Ok(Err(err)) => return Err(err),
+                Err(_) => 0,
+            };
+            rprintln!("READ DONE");
+            Ok(result)
         }
     }
 }

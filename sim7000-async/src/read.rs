@@ -32,7 +32,7 @@ impl<R: Read> ModemReader<R> {
     
     pub async fn read_line(&mut self) -> Result<String<256>, Error<R::Error>> {
         loop {
-            log::trace!("CURRENT BUFFER {:?}", core::str::from_utf8(&self.buffer));
+            log::debug!("CURRENT BUFFER {:?}", core::str::from_utf8(&self.buffer));
             if let Some(position) = self.buffer.windows(2).position(|slice| slice == b"\r\n") {
                 self.buffer.rotate_left(position);
                 self.buffer.truncate(self.buffer.len() - position);
@@ -44,7 +44,7 @@ impl<R: Read> ModemReader<R> {
                     let line_end = position + 2;
                     let s = core::str::from_utf8(&self.buffer[2..line_end])
                         .map_err(|_| Error::InvalidUtf8)?;
-                    log::trace!("RECV LINE: {:?}", s);
+                    log::debug!("RECV LINE: {:?}", s);
                     
                     // the sim7000 doesn't remember hardware flow control settings so during initialization it might drop bytes. This will fix a misaligned line reader since the sim7000 never sends empty messages
                     if s.is_empty() {

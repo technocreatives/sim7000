@@ -5,7 +5,7 @@ use embedded_hal::digital::blocking::OutputPin;
 use heapless::{Vec, String};
 use core::fmt::Write as FmtWrite;
 
-use crate::{read::{Read, ModemReader}, Error, ModemPower, PowerState, write::Write, RegistrationStatus, single_arc::SingletonArcGuard, tcp::TcpStream};
+use crate::{read::{Read, ModemReader}, Error, ModemPower, PowerState, write::Write, RegistrationStatus, single_arc::SingletonArcGuard, tcp::{TcpStream, TcpMessage}};
 pub use context::*;
 pub struct Modem<'c, P, W> {
     context: &'c ModemContext<W>,
@@ -27,7 +27,7 @@ impl<'c, P: ModemPower, W: Write> Modem<'c, P, W> {
         let pump = RxPump {
             reader: ModemReader::new(rx),
             generic_response: context.generic_response.sender(),
-            tcp_1_channel: context.tcp_1_channel.sender(),
+            tcp: &context.tcp,
             registration_events: &context.registration_events,
         };
 
@@ -54,11 +54,12 @@ impl<'c, P: ModemPower, W: Write> Modem<'c, P, W> {
         self.run_raw_command("AT+CNMP=38\r").await?;
         self.run_raw_command("AT+CMNB=1\r").await?;
         self.run_raw_command("AT+CFGRI=1\r").await?;
-        self.run_raw_command("AT+CEDRXS=1,4,\"0000\"\r").await?;
-        self.run_raw_command("AT+CEDRXS=1,4,\"0000\"\r").await?;
-        self.run_raw_command("AT+CEDRXS=1,4,\"0000\"\r").await?;
-        self.run_raw_command("AT+CEDRXS=1,4,\"0000\"\r").await?;
-        self.run_raw_command("AT+CEDRXS=1,4,\"0000\"\r").await?;
+        for _ in 0..5 {
+            match self.run_raw_command("AT+CEDRXS=1,4,\"0000\"\r").await {
+                Ok(_) => break,
+                _ => {Timer::after(Duration::from_millis(200 as u64)).await}
+            }
+        }
         self.run_raw_command("AT+CEDRXS=1,4,\"0000\"\r").await?;
 
 
@@ -81,7 +82,7 @@ impl<'c, P: ModemPower, W: Write> Modem<'c, P, W> {
         self.run_raw_command("AT+CGREG=2\r").await?;
         self.wait_for_registration().await?;
         self.run_raw_command("AT+CIPMUX=1\r").await?;
-        self.run_raw_command("AT+CIPSPRT=0\r").await?;
+        //self.run_raw_command("AT+CIPSPRT=0\r").await?;
         self.run_raw_command("AT+CIPSHUT\r").await.unwrap();
 
         self.authenticate().await?;
@@ -161,7 +162,7 @@ impl<'c, P: ModemPower, W: Write> Modem<'c, P, W> {
 pub struct RxPump<'context, R> {
     reader: ModemReader<R>,
     generic_response: Sender<'context, CriticalSectionRawMutex, heapless::String<256>, 1>,
-    tcp_1_channel: Sender<'context, CriticalSectionRawMutex, heapless::Vec<u8, 365>, 8>,
+    tcp: &'context TcpContext,
     registration_events: &'context Signal<RegistrationStatus>,
 }
 
@@ -182,41 +183,31 @@ impl<'context, R: Read> RxPump<'context, R> {
             self.registration_events.signal(stat);
         } else if line.starts_with("+RECEIVE,") {
             let mut length = line.split(&[',', ':']).nth(2).unwrap().parse::<usize>().unwrap();
+            let connection = line.split(&[',', ':']).nth(1).unwrap().parse::<usize>().unwrap();
+
             while length > 0 {
                 log::debug!("remaining read: {}", length);
                 let mut buf = Vec::new();
                 buf.resize_default(usize::min(length, 365)).unwrap();
                 self.reader.read_exact(&mut buf).await?;
                 length -= buf.len();
-                self.tcp_1_channel.send(buf).await;
+                self.tcp.rx[connection].send(buf).await;
             }
-        } else if line.ends_with(",CLOSED") {
+        } else if line.ends_with(", CLOSED") {
             let connection = line.split(&[',']).nth(0).unwrap().parse::<usize>().unwrap();
-            match connection {
-                0 => {},
-                1 => {},
-                2 => {},
-                3 => {},
-                _ => panic!(),
-            }
-        } else if line.ends_with(",SEND OK") {
+            self.tcp.events[connection].send(TcpMessage::Closed).await;
+        } else if line.ends_with(", SEND OK") {
             let connection = line.split(&[',']).nth(0).unwrap().parse::<usize>().unwrap();
-            match connection {
-                0 => {},
-                1 => {},
-                2 => {},
-                3 => {},
-                _ => panic!(),
-            }
-        } else if line.ends_with(",SEND FAIL") {
+            self.tcp.events[connection].send(TcpMessage::SendSuccess).await;
+        } else if line.ends_with(", SEND FAIL") {
             let connection = line.split(&[',']).nth(0).unwrap().parse::<usize>().unwrap();
-            match connection {
-                0 => {},
-                1 => {},
-                2 => {},
-                3 => {},
-                _ => panic!(),
-            }
+            self.tcp.events[connection].send(TcpMessage::SendFail).await;
+        } else if line.ends_with(", CONNECT OK") {
+            let connection = line.split(&[',']).nth(0).unwrap().parse::<usize>().unwrap();
+            self.tcp.events[connection].send(TcpMessage::Connected).await;
+        } else if line.ends_with(", CONNECT FAIL") {
+            let connection = line.split(&[',']).nth(0).unwrap().parse::<usize>().unwrap();
+            self.tcp.events[connection].send(TcpMessage::ConnectionFailed).await;
         }
         else {
             match self.generic_response.try_send(line) {

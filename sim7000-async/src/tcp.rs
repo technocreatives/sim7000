@@ -1,4 +1,4 @@
-use embassy::{mutex::Mutex, blocking_mutex::raw::CriticalSectionRawMutex, channel::Channel};
+use embassy::{mutex::Mutex, blocking_mutex::raw::CriticalSectionRawMutex, channel::Channel, time::Duration};
 use heapless::{Vec, String};
 use core::future::Future;
 use core::fmt::Write as WriteFmt;
@@ -29,10 +29,10 @@ impl<T> From<T> for TcpError<T> {
 }
 
 pub struct TcpStream<'s, T> {
-    token: TcpToken<'s>,
+    pub token: TcpToken<'s>,
     pub tx: SingletonArcGuard<'s, Mutex<CriticalSectionRawMutex, T>>,
-    closed: bool,
-    buffer: Vec<u8, 365>,
+    pub closed: bool,
+    pub buffer: Vec<u8, 365>,
 }
 
 impl<'s, T: SerialError> SerialError for TcpStream<'s, T> {
@@ -48,11 +48,20 @@ impl<'s, T: Write> TcpStream<'s, T> {
         let mut tx = self.tx.lock().await;
         let mut buf = heapless::String::<32>::new();
         write!(buf, "AT+CIPSEND={},{}\r", self.token.ordinal(), words.len()).unwrap();
-
+        log::debug!("WRITING DATA");
         tx.write_all(buf.as_bytes()).await?;
+        embassy::time::Timer::after(Duration::from_millis(2000)).await;
         tx.write_all(words).await?;
 
         tx.flush().await?;
+
+        write!(buf, "AT+CIPSEND={},{}\r", self.token.ordinal(), words.len()).unwrap();
+        log::debug!("WRITING DATA");
+        //tx.write_all(buf.as_bytes()).await?;
+        //tx.write_all(words).await?;
+
+        //tx.flush().await?;
+        log::debug!("WAITING FOR SEND OK");
 
         loop {
             match self.token.events().recv().await {
@@ -121,6 +130,19 @@ impl<'s, T: Write> TcpStream<'s, T> {
         } else {
             Ok(())
         }
+    }
+
+    pub async fn close(self) {
+        let mut tx = self.tx.lock().await;
+        let mut buf = heapless::String::<32>::new();
+        write!(buf, "AT+CIPCLOSE={}\r", self.token.ordinal()).unwrap();
+
+        tx.write_all(buf.as_bytes()).await.unwrap();
+
+        loop {match self.token.events().recv().await {
+            TcpMessage::Closed => break,
+            _ => {}
+        }}
     }
 }
 

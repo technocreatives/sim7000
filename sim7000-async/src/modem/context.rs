@@ -29,7 +29,7 @@ pub struct TcpContext {
 
 impl TcpContext {
     pub const fn new() -> Self {
-        TcpContext { rx: [Channel::new(); 8], events: [Channel::new(); 8], slots: [AtomicBool::new(true); 8] }
+        TcpContext { rx: [Channel::new(), Channel::new(), Channel::new(), Channel::new(), Channel::new(), Channel::new(), Channel::new(), Channel::new()], events: [Channel::new(), Channel::new(), Channel::new(), Channel::new(), Channel::new(), Channel::new(), Channel::new(), Channel::new()], slots: [AtomicBool::new(true), AtomicBool::new(true), AtomicBool::new(true), AtomicBool::new(true), AtomicBool::new(true), AtomicBool::new(true), AtomicBool::new(true), AtomicBool::new(true)] }
     }
 }
 
