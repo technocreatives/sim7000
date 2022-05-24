@@ -31,6 +31,7 @@ impl<T> From<T> for TcpError<T> {
 pub struct TcpStream<'s, T> {
     pub token: TcpToken<'s>,
     pub tx: SingletonArcGuard<'s, Mutex<CriticalSectionRawMutex, T>>,
+    pub generic_response: Channel<CriticalSectionRawMutex, String<256>, 1>,
     pub closed: bool,
     pub buffer: Vec<u8, 365>,
 }
@@ -48,20 +49,18 @@ impl<'s, T: Write> TcpStream<'s, T> {
         let mut tx = self.tx.lock().await;
         let mut buf = heapless::String::<32>::new();
         write!(buf, "AT+CIPSEND={},{}\r", self.token.ordinal(), words.len()).unwrap();
-        log::debug!("WRITING DATA");
         tx.write_all(buf.as_bytes()).await?;
-        embassy::time::Timer::after(Duration::from_millis(2000)).await;
-        tx.write_all(words).await?;
-
         tx.flush().await?;
-
-        write!(buf, "AT+CIPSEND={},{}\r", self.token.ordinal(), words.len()).unwrap();
-        log::debug!("WRITING DATA");
-        //tx.write_all(buf.as_bytes()).await?;
-        //tx.write_all(words).await?;
-
-        //tx.flush().await?;
-        log::debug!("WAITING FOR SEND OK");
+        
+        loop {
+            match self.generic_response.recv().await.as_str() {
+                "> " => break,
+                "ERROR" => return Err(TcpError::SendFail),
+                _ => {}
+            }
+        }
+        tx.write_all(words).await?;
+        tx.flush().await?;
 
         loop {
             match self.token.events().recv().await {
@@ -133,6 +132,10 @@ impl<'s, T: Write> TcpStream<'s, T> {
     }
 
     pub async fn close(self) {
+        if self.closed {
+            return;
+        }
+
         let mut tx = self.tx.lock().await;
         let mut buf = heapless::String::<32>::new();
         write!(buf, "AT+CIPCLOSE={}\r", self.token.ordinal()).unwrap();

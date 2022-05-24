@@ -59,6 +59,13 @@ impl<R: Read> ModemReader<R> {
                     self.buffer.truncate(self.buffer.len() - (line_end + 2));
 
                     return Ok(line);
+                } else if self.buffer.len() >= 4 && &self.buffer[2..4] == b"> " {
+                    let s = core::str::from_utf8(&self.buffer[2..4])
+                    .map_err(|_| Error::InvalidUtf8)?;
+                    let line = heapless::String::from(s);
+                    self.buffer.rotate_left(4);
+                    self.buffer.truncate(self.buffer.len() - 4);
+                    return Ok(line)
                 }
             }
 
