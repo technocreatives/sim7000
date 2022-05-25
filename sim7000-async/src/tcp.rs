@@ -15,33 +15,27 @@ pub enum TcpMessage {
 }
 
 #[derive(Debug)]
-pub enum TcpError<T> {
+pub enum TcpError {
     Timeout,
     SendFail,
     Closed,
-    Io(T),
 }
 
-impl<T> From<T> for TcpError<T> {
-    fn from(inner: T) -> Self {
-        TcpError::Io(inner)
-    }
-}
-
-pub struct TcpStream<'s, T> {
+pub struct TcpStream<'s> {
     pub token: TcpToken<'s>,
-    pub tx: SingletonArcGuard<'s, Mutex<CriticalSectionRawMutex, T>>,
-    pub generic_response: Channel<CriticalSectionRawMutex, String<256>, 1>,
+    pub command_mutex: &'s Mutex<CriticalSectionRawMutex, ()>,
+    pub commands: &'s Channel<CriticalSectionRawMutex, String<256>, 4>,
+    pub generic_response: &'s Channel<CriticalSectionRawMutex, String<256>, 1>,
     pub closed: bool,
     pub buffer: Vec<u8, 365>,
 }
 
-impl<'s, T: SerialError> SerialError for TcpStream<'s, T> {
-    type Error = TcpError<T::Error>;
+impl<'s> SerialError for TcpStream<'s> {
+    type Error = TcpError;
 }
 
-impl<'s, T: Write> TcpStream<'s, T> {
-    async fn send_tcp(&mut self, words: &[u8]) -> Result<(), TcpError<T::Error>> {
+impl<'s> TcpStream<'s> {
+    async fn send_tcp(&mut self, words: &[u8]) -> Result<(), TcpError> {
         if self.closed {
             return Err(TcpError::Closed);
         }
@@ -78,7 +72,7 @@ impl<'s, T: Write> TcpStream<'s, T> {
         Ok(())
     }
 
-    async fn inner_read<'a>(&'a mut self, read: &'a mut [u8]) -> Result<usize, TcpError<T::Error>> {
+    async fn inner_read<'a>(&'a mut self, read: &'a mut [u8]) -> Result<usize, TcpError> {
             if self.closed {
                 return Ok(0);
             }
@@ -112,7 +106,7 @@ impl<'s, T: Write> TcpStream<'s, T> {
             }
     }
 
-    async fn inner_read_exact<'a>(&'a mut self, mut buf: &'a mut [u8]) -> Result<(), TcpError<T::Error>> {
+    async fn inner_read_exact<'a>(&'a mut self, mut buf: &'a mut [u8]) -> Result<(), TcpError> {
         while !buf.is_empty() {
             match self.inner_read(buf).await {
                 Ok(0) => break,
@@ -149,7 +143,7 @@ impl<'s, T: Write> TcpStream<'s, T> {
     }
 }
 
-impl<'s, T: Write> Write for TcpStream<'s, T> {
+impl<'s> Write for TcpStream<'s> {
     type WriteAllFuture<'a> = impl Future<Output = Result<(), Self::Error>> + 'a
     where
         Self: 'a;
@@ -169,7 +163,7 @@ impl<'s, T: Write> Write for TcpStream<'s, T> {
     }
 }
 
-impl<'s, T: Write> Read for TcpStream<'s, T> {
+impl<'s> Read for TcpStream<'s> {
     type ReadFuture<'a> = impl Future<Output = Result<usize, Self::Error>> + 'a
     where
         Self: 'a;

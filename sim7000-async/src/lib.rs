@@ -23,18 +23,11 @@ pub trait SerialError {
 }
 
 #[derive(Debug)]
-pub enum Error<S: core::fmt::Debug> {
+pub enum Error {
     InvalidUtf8,
-    SerialError(S),
     BufferOverflow,
     SimError,
     Timeout
-}
-
-impl<S: core::fmt::Debug> From<S> for Error<S> {
-    fn from(value: S) -> Self {
-        Error::SerialError(value)
-    }
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]

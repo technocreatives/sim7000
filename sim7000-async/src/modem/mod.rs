@@ -7,31 +7,39 @@ use core::fmt::Write as FmtWrite;
 
 use crate::{read::{Read, ModemReader}, Error, ModemPower, PowerState, write::Write, RegistrationStatus, single_arc::SingletonArcGuard, tcp::{TcpStream, TcpMessage}};
 pub use context::*;
-pub struct Modem<'c, P, W> {
-    context: &'c ModemContext<W>,
+
+pub struct Uninitialized;
+pub struct Disabled;
+pub struct Enabled;
+pub struct Sleeping;
+
+pub struct Modem<'c, P> {
+    context: &'c ModemContext,
     power: P,
-    tx: SingletonArcGuard<'c, Mutex<CriticalSectionRawMutex, W>>,
 }
 
-impl<'c, P: ModemPower, W: Write> Modem<'c, P, W> {
-    pub async fn new<R: Read>(
+impl<'c, P: ModemPower> Modem<'c, P> {
+    pub async fn new<R: Read, W: Write>(
         rx: R,
         tx: W,
         power: P,
-        context: &'c ModemContext<W>,
-    ) -> Result<(Modem<'c, P, W>, RxPump<'c, R>), Error<W::Error>> {
-        let tx = context.transmit.get_or_init(move || Mutex::new(tx));
-        
-        let modem = Modem { context, power, tx };
+        context: &'c ModemContext,
+    ) -> Result<(Modem<'c, P>, TxPump<'c, W>, RxPump<'c, R>), Error<W::Error>> {        
+        let modem = Modem { context, power };
 
-        let pump = RxPump {
+        let rx_pump = RxPump {
             reader: ModemReader::new(rx),
             generic_response: context.generic_response.sender(),
             tcp: &context.tcp,
             registration_events: &context.registration_events,
         };
 
-        Ok((modem, pump))
+        let tx_pump = TxPump {
+            writer: tx,
+            commands: context.commands.receiver(),
+        };
+
+        Ok((modem, tx_pump, rx_pump))
     }
 
     pub async fn init(&mut self) -> Result<(), Error<W::Error>> {
@@ -115,12 +123,11 @@ impl<'c, P: ModemPower, W: Write> Modem<'c, P, W> {
         Ok(())
     }
 
-    pub async fn run_raw_command(&self, command: &str) -> Result<Vec<String<32>, 4>, Error<W::Error>> {
+    pub async fn run_raw_command(&self, command: &str) -> Result<Vec<String<32>, 4>, Error> {
         log::info!("Sending command {}", command);
-        let mut tx = self.tx.lock().await;
-        tx.write_all(command.as_bytes()).await?;
-        tx.flush().await?;
-
+        let lock = self.context.command_mutex.lock().await;
+        self.context.commands.send(String::from(command)).await;
+    
         let mut responses = Vec::new();
         loop {
             match self.context.generic_response.recv().await.as_str() {
@@ -130,13 +137,14 @@ impl<'c, P: ModemPower, W: Write> Modem<'c, P, W> {
                 res => {responses.push(res.into());}
             }
         }
-        drop(tx);
+        drop(lock);
         Ok(responses)
     }
 
-    pub async fn connect_tcp(&mut self, host: &str, port: u16) -> TcpStream<'c, W> {
+    pub async fn connect_tcp(&mut self, host: &str, port: u16) -> TcpStream<'c> {
         let tcp_context = self.context.tcp.claim().unwrap();
-        self.tx.lock().await.write_all(b"AT+CIFSR\r").await.unwrap();
+        self.context.command_mutex.lock().await;
+        self.context.commands.send((b"AT+CIFSR\r").await.unwrap();
 
         let mut buf = heapless::String::<256>::new();
         write!(buf, "AT+CIPSTART={},\"TCP\",\"{}\",\"{}\"\r", tcp_context.ordinal(), host, port).unwrap();
@@ -152,7 +160,9 @@ impl<'c, P: ModemPower, W: Write> Modem<'c, P, W> {
 
         TcpStream {
             token: tcp_context,
-            tx: self.tx.clone(),
+            command_mutex: &self.context.command_mutex,
+            commands: &self.context.commands,
+            generic_response: &self.context.generic_response,
             closed: false,
             buffer: Vec::new(),
         }
@@ -196,6 +206,9 @@ impl<'context, R: Read> RxPump<'context, R> {
         } else if line.ends_with(", CLOSED") {
             let connection = line.split(&[',']).nth(0).unwrap().parse::<usize>().unwrap();
             self.tcp.events[connection].send(TcpMessage::Closed).await;
+        } else if line.ends_with(", CLOSE OK") {
+            let connection = line.split(&[',']).nth(0).unwrap().parse::<usize>().unwrap();
+            self.tcp.events[connection].send(TcpMessage::Closed).await;
         } else if line.ends_with(", SEND OK") {
             let connection = line.split(&[',']).nth(0).unwrap().parse::<usize>().unwrap();
             self.tcp.events[connection].send(TcpMessage::SendSuccess).await;
@@ -215,6 +228,20 @@ impl<'context, R: Read> RxPump<'context, R> {
                 Err(_) => log::info!("message queue full"),
             }
         }
+        Ok(())
+    }
+}
+
+pub struct TxPump<'context, W> {
+    writer: W,
+    commands: Receiver<'context, CriticalSectionRawMutex, heapless::String<256>, 4>,
+}
+
+impl<'context, W: Write> TxPump<'context, W> {
+    pub async fn pump(&mut self) -> Result<(), W::Error> {
+        let command = self.commands.recv().await;
+        self.writer.write_all(command.as_bytes()).await?;
+
         Ok(())
     }
 }

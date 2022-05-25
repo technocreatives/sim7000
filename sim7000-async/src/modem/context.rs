@@ -7,17 +7,18 @@ use crate::{single_arc::SingletonArc, RegistrationStatus, tcp::TcpMessage};
 
 pub type TcpRxChannel = Channel<CriticalSectionRawMutex, Vec<u8, 365>, 8>;
 
-pub struct ModemContext<T> {
+pub struct ModemContext {
+    pub(crate) command_mutex: Mutex<CriticalSectionRawMutex, ()>,
+    pub(crate) commands: Channel<CriticalSectionRawMutex, String<256>, 4>,
     pub(crate) generic_response: Channel<CriticalSectionRawMutex, String<256>, 1>,
     pub(crate) tcp: TcpContext,
     pub(crate) registration_events: Signal<RegistrationStatus>,
-    pub(crate) transmit: SingletonArc<Mutex<CriticalSectionRawMutex, T>>,
 }
 
 
-impl<R> ModemContext<R> {
+impl ModemContext {
     pub const fn new() -> Self {
-        ModemContext { generic_response: Channel::new(), tcp: TcpContext::new(), registration_events: Signal::new(), transmit: SingletonArc::new() }
+        ModemContext { command_mutex: Mutex::new(()), commands: Channel::new(), generic_response: Channel::new(), tcp: TcpContext::new(), registration_events: Signal::new() }
     }
 }
 
