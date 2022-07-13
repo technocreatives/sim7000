@@ -36,7 +36,7 @@ impl TcpClient {
     pub fn connect<T>(
         &mut self,
         modem: &mut T,
-        host: &'static str,
+        host: &str,
         port: u16,
         timeout: Option<u32>,
     ) -> Result<(), Error<T::SerialError>>

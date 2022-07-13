@@ -8,13 +8,13 @@ impl AtCommand for Cipstart {
     const COMMAND: &'static str = "AT+CIPSTART";
 }
 
-pub struct TcpConnectionParams {
+pub struct TcpConnectionParams<'a> {
     pub mode: &'static str,
-    pub host: &'static str,
+    pub host: &'a str,
     pub port: u16,
 }
 
-impl AtEncode for TcpConnectionParams {
+impl<'a> AtEncode for TcpConnectionParams<'a> {
     fn encode<B: SerialWrite>(
         &self,
         encoder: &mut Encoder<B>,
@@ -60,7 +60,7 @@ impl AtDecode for ConnectionResult {
     }
 }
 
-impl AtWrite<'_> for Cipstart {
-    type Input = TcpConnectionParams;
+impl<'a> AtWrite<'a> for Cipstart {
+    type Input = TcpConnectionParams<'a>;
     type Output = ConnectionResult;
 }
