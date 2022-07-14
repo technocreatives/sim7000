@@ -1,0 +1,41 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - main
+      - alpha
+      - beta
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    if: github.repository == 'technocreatives/sim7000'
+    
+    steps:
+    - uses: actions/checkout@v2
+
+    - name: Install Rust
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+        profile: minimal
+        override: true
+    
+    - name: Build
+      uses: actions-rs/cargo@v1
+      with:
+        command: build
+        args: --release
+    
+    - name: release
+      uses: cycjimmy/semantic-release-action@v2
+      id: semantic
+      with:
+        semantic_version: 17.1.1
+        extra_plugins: |
+          @semantic-release/exec@5.0
+          @semantic-release/git@9.0
+      env:
+        GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
+        CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}

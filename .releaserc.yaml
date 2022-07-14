@@ -1,0 +1,16 @@
+branches:
+  - main
+  - name: beta
+    prerelease: true
+  - name: alpha
+    prerelease: true
+
+plugins:
+    - '@semantic-release/commit-analyzer'
+    - '@semantic-release/release-notes-generator'
+    - '@semantic-release/github'
+    - - '@semantic-release/exec'
+      - prepareCmd: "cargo install cargo-bump && cargo bump ${nextRelease.version}"
+        publishCmd: "cargo publish -vv"
+    - - '@semantic-release/git'
+      - assets: Cargo.toml
