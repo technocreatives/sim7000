@@ -1,7 +1,4 @@
 [env.probe]
-usb_vid = "1366"
-usb_pid = "0105"
-# serial = "000059700618"
 protocol = "Swd"
 speed = 4000
 
