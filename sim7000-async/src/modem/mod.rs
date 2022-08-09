@@ -1,11 +1,22 @@
+mod command;
 mod context;
 
-use embassy::{blocking_mutex::raw::CriticalSectionRawMutex, channel::{Sender, Receiver, Signal}, time::{Duration, Timer}, mutex::Mutex};
-use embedded_hal::digital::blocking::OutputPin;
-use heapless::{Vec, String};
 use core::fmt::Write as FmtWrite;
+use embassy_executor::time::{with_timeout, Duration, Timer};
+use embassy_util::{
+    blocking_mutex::raw::CriticalSectionRawMutex,
+    channel::mpmc::{Receiver, Sender},
+    channel::signal::Signal,
+};
+use heapless::{String, Vec};
 
-use crate::{read::{Read, ModemReader}, Error, ModemPower, PowerState, write::Write, RegistrationStatus, single_arc::SingletonArcGuard, tcp::{TcpStream, TcpMessage}};
+use crate::{
+    read::{ModemReader, Read},
+    tcp::{TcpMessage, TcpStream},
+    write::Write,
+    Error, ModemPower, RegistrationStatus,
+};
+pub use command::Command;
 pub use context::*;
 
 pub struct Uninitialized;
@@ -24,7 +35,7 @@ impl<'c, P: ModemPower> Modem<'c, P> {
         tx: W,
         power: P,
         context: &'c ModemContext,
-    ) -> Result<(Modem<'c, P>, TxPump<'c, W>, RxPump<'c, R>), Error<W::Error>> {        
+    ) -> Result<(Modem<'c, P>, TxPump<'c, W>, RxPump<'c, R>), Error> {
         let modem = Modem { context, power };
 
         let rx_pump = RxPump {
@@ -42,14 +53,16 @@ impl<'c, P: ModemPower> Modem<'c, P> {
         Ok((modem, tx_pump, rx_pump))
     }
 
-    pub async fn init(&mut self) -> Result<(), Error<W::Error>> {
+    pub async fn init(&mut self) -> Result<(), Error> {
         self.power.disable().await;
         self.power.enable().await;
 
         for _ in 0..5 {
-            match embassy::time::with_timeout(Duration::from_millis(2000), async {
+            match with_timeout(Duration::from_millis(2000), async {
                 self.run_raw_command("AT+IFC=2,2\r").await
-            }).await {
+            })
+            .await
+            {
                 Ok(Ok(_)) => break,
                 _ => {}
             }
@@ -65,22 +78,23 @@ impl<'c, P: ModemPower> Modem<'c, P> {
         for _ in 0..5 {
             match self.run_raw_command("AT+CEDRXS=1,4,\"0000\"\r").await {
                 Ok(_) => break,
-                _ => {Timer::after(Duration::from_millis(200 as u64)).await}
+                _ => Timer::after(Duration::from_millis(200 as u64)).await,
             }
         }
         self.run_raw_command("AT+CEDRXS=1,4,\"0000\"\r").await?;
-
 
         self.power.disable().await;
         Ok(())
     }
 
-    pub async fn activate(&mut self) -> Result<(), Error<W::Error>> {
+    pub async fn activate(&mut self) -> Result<(), Error> {
         self.power.enable().await;
         for _ in 0..5 {
-            match embassy::time::with_timeout(Duration::from_millis(2000), async {
+            match with_timeout(Duration::from_millis(2000), async {
                 self.run_raw_command("AT+IFC=2,2\r").await
-            }).await {
+            })
+            .await
+            {
                 Ok(Ok(_)) => break,
                 _ => {}
             }
@@ -97,11 +111,13 @@ impl<'c, P: ModemPower> Modem<'c, P> {
         Ok(())
     }
 
-    async fn wait_for_registration(&mut self) -> Result<(), Error<W::Error>> {
+    async fn wait_for_registration(&mut self) -> Result<(), Error> {
         loop {
-            match embassy::time::with_timeout(Duration::from_millis(2000), async {
+            match with_timeout(Duration::from_millis(2000), async {
                 self.run_raw_command("AT+CGREG?\r").await
-            }).await {
+            })
+            .await
+            {
                 Err(_) => continue,
                 _ => {}
             }
@@ -116,8 +132,9 @@ impl<'c, P: ModemPower> Modem<'c, P> {
         Ok(())
     }
 
-    async fn authenticate(&mut self) -> Result<(), Error<W::Error>> {
-        self.run_raw_command("AT+CSTT=\"iot.1nce.net\",\"\",\"\"\r").await?;
+    async fn authenticate(&mut self) -> Result<(), Error> {
+        self.run_raw_command("AT+CSTT=\"iot.1nce.net\",\"\",\"\"\r")
+            .await?;
         self.run_raw_command("AT+CIICR\r").await?;
 
         Ok(())
@@ -126,15 +143,19 @@ impl<'c, P: ModemPower> Modem<'c, P> {
     pub async fn run_raw_command(&self, command: &str) -> Result<Vec<String<32>, 4>, Error> {
         log::info!("Sending command {}", command);
         let lock = self.context.command_mutex.lock().await;
-        self.context.commands.send(String::from(command)).await;
-    
+        self.context.commands.send(command.into()).await;
+
         let mut responses = Vec::new();
         loop {
             match self.context.generic_response.recv().await.as_str() {
                 "OK" | "SHUT OK" => break,
                 "ERROR" => return Err(Error::SimError),
                 res if res.starts_with("+CME ERROR") => return Err(Error::SimError),
-                res => {responses.push(res.into());}
+                res => {
+                    responses
+                        .push(res.into())
+                        .map_err(|_| Error::BufferOverflow)?;
+                }
             }
         }
         drop(lock);
@@ -144,12 +165,19 @@ impl<'c, P: ModemPower> Modem<'c, P> {
     pub async fn connect_tcp(&mut self, host: &str, port: u16) -> TcpStream<'c> {
         let tcp_context = self.context.tcp.claim().unwrap();
         self.context.command_mutex.lock().await;
-        self.context.commands.send((b"AT+CIFSR\r").await.unwrap();
+        self.context.commands.send("AT+CIFSR\r".into()).await;
 
         let mut buf = heapless::String::<256>::new();
-        write!(buf, "AT+CIPSTART={},\"TCP\",\"{}\",\"{}\"\r", tcp_context.ordinal(), host, port).unwrap();
-        self.run_raw_command(buf.as_str()).await.unwrap();
-        
+        write!(
+            buf,
+            "AT+CIPSTART={},\"TCP\",\"{}\",\"{}\"\r",
+            tcp_context.ordinal(),
+            host,
+            port
+        )
+        .unwrap();
+        self.run_raw_command(buf.as_str()).await.unwrap(); // TODO: remove unwrap
+
         loop {
             match tcp_context.events().recv().await {
                 crate::tcp::TcpMessage::Connected => break,
@@ -177,12 +205,18 @@ pub struct RxPump<'context, R> {
 }
 
 impl<'context, R: Read> RxPump<'context, R> {
-    pub async fn pump(&mut self) -> Result<(), Error<R::Error>> {
+    pub async fn pump(&mut self) -> Result<(), Error> {
         let line = self.reader.read_line().await?;
         log::info!("Sending response line {}", line);
 
         if line.starts_with("+CGREG:") {
-            let stat = match line.split(&[' ', ',']).nth(2).unwrap().parse::<i32>().unwrap() {
+            let stat = match line
+                .split(&[' ', ','])
+                .nth(2)
+                .unwrap()
+                .parse::<i32>()
+                .unwrap()
+            {
                 1 => RegistrationStatus::RegisteredHome,
                 2 => RegistrationStatus::Searching,
                 3 => RegistrationStatus::RegistrationDenied,
@@ -192,8 +226,18 @@ impl<'context, R: Read> RxPump<'context, R> {
             };
             self.registration_events.signal(stat);
         } else if line.starts_with("+RECEIVE,") {
-            let mut length = line.split(&[',', ':']).nth(2).unwrap().parse::<usize>().unwrap();
-            let connection = line.split(&[',', ':']).nth(1).unwrap().parse::<usize>().unwrap();
+            let mut length = line
+                .split(&[',', ':'])
+                .nth(2)
+                .unwrap()
+                .parse::<usize>()
+                .unwrap();
+            let connection = line
+                .split(&[',', ':'])
+                .nth(1)
+                .unwrap()
+                .parse::<usize>()
+                .unwrap();
 
             while length > 0 {
                 log::debug!("remaining read: {}", length);
@@ -211,20 +255,25 @@ impl<'context, R: Read> RxPump<'context, R> {
             self.tcp.events[connection].send(TcpMessage::Closed).await;
         } else if line.ends_with(", SEND OK") {
             let connection = line.split(&[',']).nth(0).unwrap().parse::<usize>().unwrap();
-            self.tcp.events[connection].send(TcpMessage::SendSuccess).await;
+            self.tcp.events[connection]
+                .send(TcpMessage::SendSuccess)
+                .await;
         } else if line.ends_with(", SEND FAIL") {
             let connection = line.split(&[',']).nth(0).unwrap().parse::<usize>().unwrap();
             self.tcp.events[connection].send(TcpMessage::SendFail).await;
         } else if line.ends_with(", CONNECT OK") {
             let connection = line.split(&[',']).nth(0).unwrap().parse::<usize>().unwrap();
-            self.tcp.events[connection].send(TcpMessage::Connected).await;
+            self.tcp.events[connection]
+                .send(TcpMessage::Connected)
+                .await;
         } else if line.ends_with(", CONNECT FAIL") {
             let connection = line.split(&[',']).nth(0).unwrap().parse::<usize>().unwrap();
-            self.tcp.events[connection].send(TcpMessage::ConnectionFailed).await;
-        }
-        else {
+            self.tcp.events[connection]
+                .send(TcpMessage::ConnectionFailed)
+                .await;
+        } else {
             match self.generic_response.try_send(line) {
-                Ok(_) => {},
+                Ok(_) => {}
                 Err(_) => log::info!("message queue full"),
             }
         }
@@ -234,7 +283,7 @@ impl<'context, R: Read> RxPump<'context, R> {
 
 pub struct TxPump<'context, W> {
     writer: W,
-    commands: Receiver<'context, CriticalSectionRawMutex, heapless::String<256>, 4>,
+    commands: Receiver<'context, CriticalSectionRawMutex, Command, 4>,
 }
 
 impl<'context, W: Write> TxPump<'context, W> {
@@ -253,7 +302,10 @@ pub struct RegistrationHandler<'context> {
 impl<'context> RegistrationHandler<'context> {
     pub async fn pump(&mut self) {
         match self.context.wait().await {
-            RegistrationStatus::NotRegistered | RegistrationStatus::Searching | RegistrationStatus::RegistrationDenied | RegistrationStatus::Unknown => todo!(),
+            RegistrationStatus::NotRegistered
+            | RegistrationStatus::Searching
+            | RegistrationStatus::RegistrationDenied
+            | RegistrationStatus::Unknown => todo!(),
             RegistrationStatus::RegisteredHome => todo!(),
             RegistrationStatus::RegisteredRoaming => todo!(),
         }

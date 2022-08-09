@@ -2,21 +2,13 @@
 #![feature(generic_associated_types)]
 #![feature(type_alias_impl_trait)]
 
-pub mod read;
-pub mod write;
 pub mod modem;
-pub mod tcp;
+pub mod read;
 pub mod single_arc;
+pub mod tcp;
+pub mod write;
 
-use core::{future::Future, sync::atomic::AtomicU8};
-use embassy::{
-    mutex::Mutex,
-    blocking_mutex::{raw::CriticalSectionRawMutex},
-    channel::{Channel, Signal},
-};
-use embedded_hal::digital::blocking::OutputPin;
-use embedded_hal_async::digital::Wait;
-use single_arc::SingletonArc;
+use core::future::Future;
 
 pub trait SerialError {
     type Error: core::fmt::Debug;
@@ -27,7 +19,7 @@ pub enum Error {
     InvalidUtf8,
     BufferOverflow,
     SimError,
-    Timeout
+    Timeout,
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
@@ -39,9 +31,6 @@ pub enum RegistrationStatus {
     Unknown,
     RegisteredRoaming,
 }
-
-
-
 
 #[derive(PartialEq, Eq)]
 pub enum PowerState {

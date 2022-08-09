@@ -1,24 +1,33 @@
 use core::sync::atomic::{AtomicBool, Ordering};
 
-use embassy::{channel::{Channel, Signal}, blocking_mutex::raw::CriticalSectionRawMutex, mutex::Mutex};
+use embassy_util::{
+    blocking_mutex::raw::CriticalSectionRawMutex, channel::mpmc::Channel, channel::signal::Signal,
+    mutex::Mutex,
+};
 use heapless::{String, Vec};
 
-use crate::{single_arc::SingletonArc, RegistrationStatus, tcp::TcpMessage};
+use super::Command;
+use crate::{tcp::TcpMessage, RegistrationStatus};
 
 pub type TcpRxChannel = Channel<CriticalSectionRawMutex, Vec<u8, 365>, 8>;
 
 pub struct ModemContext {
     pub(crate) command_mutex: Mutex<CriticalSectionRawMutex, ()>,
-    pub(crate) commands: Channel<CriticalSectionRawMutex, String<256>, 4>,
+    pub(crate) commands: Channel<CriticalSectionRawMutex, Command, 4>,
     pub(crate) generic_response: Channel<CriticalSectionRawMutex, String<256>, 1>,
     pub(crate) tcp: TcpContext,
     pub(crate) registration_events: Signal<RegistrationStatus>,
 }
 
-
 impl ModemContext {
     pub const fn new() -> Self {
-        ModemContext { command_mutex: Mutex::new(()), commands: Channel::new(), generic_response: Channel::new(), tcp: TcpContext::new(), registration_events: Signal::new() }
+        ModemContext {
+            command_mutex: Mutex::new(()),
+            commands: Channel::new(),
+            generic_response: Channel::new(),
+            tcp: TcpContext::new(),
+            registration_events: Signal::new(),
+        }
     }
 }
 
@@ -30,7 +39,38 @@ pub struct TcpContext {
 
 impl TcpContext {
     pub const fn new() -> Self {
-        TcpContext { rx: [Channel::new(), Channel::new(), Channel::new(), Channel::new(), Channel::new(), Channel::new(), Channel::new(), Channel::new()], events: [Channel::new(), Channel::new(), Channel::new(), Channel::new(), Channel::new(), Channel::new(), Channel::new(), Channel::new()], slots: [AtomicBool::new(true), AtomicBool::new(true), AtomicBool::new(true), AtomicBool::new(true), AtomicBool::new(true), AtomicBool::new(true), AtomicBool::new(true), AtomicBool::new(true)] }
+        TcpContext {
+            rx: [
+                Channel::new(),
+                Channel::new(),
+                Channel::new(),
+                Channel::new(),
+                Channel::new(),
+                Channel::new(),
+                Channel::new(),
+                Channel::new(),
+            ],
+            events: [
+                Channel::new(),
+                Channel::new(),
+                Channel::new(),
+                Channel::new(),
+                Channel::new(),
+                Channel::new(),
+                Channel::new(),
+                Channel::new(),
+            ],
+            slots: [
+                AtomicBool::new(true),
+                AtomicBool::new(true),
+                AtomicBool::new(true),
+                AtomicBool::new(true),
+                AtomicBool::new(true),
+                AtomicBool::new(true),
+                AtomicBool::new(true),
+                AtomicBool::new(true),
+            ],
+        }
     }
 }
 
@@ -50,7 +90,6 @@ impl TcpContext {
         None
     }
 }
-
 
 pub struct TcpToken<'c> {
     ordinal: usize,

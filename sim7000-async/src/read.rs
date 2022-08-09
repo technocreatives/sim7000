@@ -1,4 +1,4 @@
-use core::{future::Future};
+use core::future::Future;
 
 use heapless::{String, Vec};
 
@@ -27,10 +27,13 @@ pub struct ModemReader<R> {
 
 impl<R: Read> ModemReader<R> {
     pub fn new(read: R) -> ModemReader<R> {
-        ModemReader { read, buffer: Vec::new() }
+        ModemReader {
+            read,
+            buffer: Vec::new(),
+        }
     }
-    
-    pub async fn read_line(&mut self) -> Result<String<256>, Error<R::Error>> {
+
+    pub async fn read_line(&mut self) -> Result<String<256>, Error> {
         loop {
             log::debug!("CURRENT BUFFER {:?}", core::str::from_utf8(&self.buffer));
             if let Some(position) = self.buffer.windows(2).position(|slice| slice == b"\r\n") {
@@ -45,7 +48,7 @@ impl<R: Read> ModemReader<R> {
                     let s = core::str::from_utf8(&self.buffer[2..line_end])
                         .map_err(|_| Error::InvalidUtf8)?;
                     log::debug!("RECV LINE: {:?}", s);
-                    
+
                     // the sim7000 doesn't remember hardware flow control settings so during initialization it might drop bytes. This will fix a misaligned line reader since the sim7000 never sends empty messages
                     if s.is_empty() {
                         self.buffer.rotate_left(line_end);
@@ -60,12 +63,12 @@ impl<R: Read> ModemReader<R> {
 
                     return Ok(line);
                 } else if self.buffer.len() >= 4 && &self.buffer[2..4] == b"> " {
-                    let s = core::str::from_utf8(&self.buffer[2..4])
-                    .map_err(|_| Error::InvalidUtf8)?;
+                    let s =
+                        core::str::from_utf8(&self.buffer[2..4]).map_err(|_| Error::InvalidUtf8)?;
                     let line = heapless::String::from(s);
                     self.buffer.rotate_left(4);
                     self.buffer.truncate(self.buffer.len() - 4);
-                    return Ok(line)
+                    return Ok(line);
                 }
             }
 
@@ -77,7 +80,8 @@ impl<R: Read> ModemReader<R> {
             let amount = self
                 .read
                 .read(&mut buf[..self.buffer.capacity() - self.buffer.len()])
-                .await?;
+                .await
+                .map_err(|_| Error::SimError)?; // TODO: figure out error types
 
             self.buffer
                 .extend_from_slice(&buf[..amount])
@@ -85,14 +89,17 @@ impl<R: Read> ModemReader<R> {
         }
     }
 
-    pub async fn read_exact(&mut self, buf: &mut [u8]) -> Result<(), Error<R::Error>> {
+    pub async fn read_exact(&mut self, buf: &mut [u8]) -> Result<(), Error> {
         if self.buffer.len() >= buf.len() {
             buf.copy_from_slice(&self.buffer.as_slice()[..buf.len()]);
             self.buffer.rotate_left(buf.len());
             self.buffer.truncate(self.buffer.len() - buf.len())
         } else {
             buf[..self.buffer.len()].copy_from_slice(self.buffer.as_slice());
-            self.read.read_exact(&mut buf[self.buffer.len()..]).await?;
+            self.read
+                .read_exact(&mut buf[self.buffer.len()..])
+                .await
+                .map_err(|_| Error::SimError)?; // TODO: figure out error types
             self.buffer.clear();
         }
 

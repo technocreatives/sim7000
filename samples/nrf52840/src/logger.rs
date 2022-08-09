@@ -44,7 +44,7 @@ impl Log for Logger {
 use log::LevelFilter;
 
 #[macro_export]
-#[cfg(debug_assertions)]
+//#[cfg(debug_assertions)]
 macro_rules! rtt_init_logger {
     ($mode:ident) => {
         use log::LevelFilter;
@@ -63,12 +63,12 @@ macro_rules! rtt_init_logger {
 }
 
 /// Don't create a SEGGER_RTT section in release
-#[macro_export]
-#[cfg(not(debug_assertions))]
-macro_rules! rtt_init_logger {
-    ($mode:ident) => {};
-    () => {};
-}
+//#[macro_export]
+//#[cfg(not(debug_assertions))]
+//macro_rules! rtt_init_logger {
+//    ($mode:ident) => {};
+//    () => {};
+//}
 
 pub fn set_level(level: LevelFilter) {
     log::set_max_level(level);
