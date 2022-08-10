@@ -141,7 +141,6 @@ impl<'c, P: ModemPower> Modem<'c, P> {
     }
 
     pub async fn run_raw_command(&self, command: &str) -> Result<Vec<String<32>, 4>, Error> {
-        log::info!("Sending command {}", command);
         let lock = self.context.command_mutex.lock().await;
         self.context.commands.send(command.into()).await;
 
@@ -207,7 +206,7 @@ pub struct RxPump<'context, R> {
 impl<'context, R: Read> RxPump<'context, R> {
     pub async fn pump(&mut self) -> Result<(), Error> {
         let line = self.reader.read_line().await?;
-        log::info!("Sending response line {}", line);
+        log::info!("Read from modem: {}", line);
 
         if line.starts_with("+CGREG:") {
             let stat = match line
@@ -239,6 +238,7 @@ impl<'context, R: Read> RxPump<'context, R> {
                 .parse::<usize>()
                 .unwrap();
 
+            log::info!("Reading {length} bytes from modem");
             while length > 0 {
                 log::debug!("remaining read: {}", length);
                 let mut buf = Vec::new();
@@ -289,6 +289,10 @@ pub struct TxPump<'context, W> {
 impl<'context, W: Write> TxPump<'context, W> {
     pub async fn pump(&mut self) -> Result<(), W::Error> {
         let command = self.commands.recv().await;
+        match &command {
+            Command::Text(text) => log::info!("Write to modem: {text}"),
+            Command::Binary(bytes) => log::info!("Write {} bytes to modem", bytes.len()),
+        }
         self.writer.write_all(command.as_bytes()).await?;
 
         Ok(())

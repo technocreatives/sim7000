@@ -76,7 +76,7 @@ impl TcpContext {
 
 impl TcpContext {
     pub fn claim(&self) -> Option<TcpToken> {
-        for i in 0..7 {
+        for i in 0..self.slots.len() {
             if self.slots[i].fetch_and(false, Ordering::Relaxed) {
                 return Some(TcpToken {
                     ordinal: i,
