@@ -167,6 +167,11 @@ impl<'s> TcpStream<'s> {
             }
         }
 
+        // clear read buffer
+        // TODO: i'm not sure if this is enough to clear the buffer,
+        // if the channel is full and the RxPump is blocked, more stuff might be added later
+        while self.token.rx().try_recv().is_ok() {}
+
         self.closed = true;
     }
 }
