@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use crate::Modem;
 use core::mem::drop;
 use core::str::from_utf8;

@@ -6,7 +6,7 @@ use crate::util::collect_array;
 pub struct IncomingConnection {
     // core::net::IpAddr doesn't exist, very sad.
     // TODO: find out if modem supports ipv6
-    remote_ip: [u8; 4],
+    pub remote_ip: [u8; 4],
 }
 
 impl ATParseLine for IncomingConnection {
