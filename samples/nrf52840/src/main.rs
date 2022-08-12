@@ -66,16 +66,25 @@ async fn main(spawner: Spawner, p: Peripherals) {
     log::info!("Sleeping 1s");
     Timer::after(Duration::from_millis(1000)).await;
 
-    if example::spawn_ping_tcpbin(&spawner, &mut modem)
+    modem
+        .run_raw_command("AT+CGNSPWR=1\r")
         .await
-        .is_err()
-    {
-        log::error!("Failed to spawn ping_tcpbin");
-    }
+        .expect("enable gnss");
+    modem
+        .run_raw_command("AT+CGNSURC=2\r")
+        .await
+        .expect("enable gnss");
 
-    if example::get_quote_of_the_day(&mut modem).await.is_err() {
-        log::error!("Failed to get Quot of the Day");
-    }
+    //if example::spawn_ping_tcpbin(&spawner, &mut modem)
+    //    .await
+    //    .is_err()
+    //{
+    //    log::error!("Failed to spawn ping_tcpbin");
+    //}
+
+    //if example::get_quote_of_the_day(&mut modem).await.is_err() {
+    //    log::error!("Failed to get Quot of the Day");
+    //}
 
     log::info!("main() finished");
     loop {
