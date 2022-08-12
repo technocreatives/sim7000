@@ -7,7 +7,7 @@ use embassy_util::{
 use heapless::{String, Vec};
 
 use super::Command;
-use crate::{tcp::TcpMessage, RegistrationStatus};
+use crate::modem::at_command::unsolicited::{ConnectionMessage, RegistrationStatus};
 
 pub type TcpRxChannel = Channel<CriticalSectionRawMutex, Vec<u8, 365>, 8>;
 
@@ -33,7 +33,7 @@ impl ModemContext {
 
 pub struct TcpContext {
     pub(crate) rx: [TcpRxChannel; 8],
-    pub(crate) events: [Channel<CriticalSectionRawMutex, TcpMessage, 4>; 8],
+    pub(crate) events: [Channel<CriticalSectionRawMutex, ConnectionMessage, 4>; 8],
     pub(crate) slots: [AtomicBool; 8],
 }
 
@@ -94,7 +94,7 @@ impl TcpContext {
 pub struct TcpToken<'c> {
     ordinal: usize,
     rx: &'c TcpRxChannel,
-    events: &'c Channel<CriticalSectionRawMutex, TcpMessage, 4>,
+    events: &'c Channel<CriticalSectionRawMutex, ConnectionMessage, 4>,
     slot: &'c AtomicBool,
 }
 
@@ -107,7 +107,7 @@ impl<'c> TcpToken<'c> {
         self.rx
     }
 
-    pub fn events(&self) -> &'c Channel<CriticalSectionRawMutex, TcpMessage, 4> {
+    pub fn events(&self) -> &'c Channel<CriticalSectionRawMutex, ConnectionMessage, 4> {
         self.events
     }
 }

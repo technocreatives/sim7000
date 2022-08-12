@@ -1,6 +1,11 @@
+pub mod at_command;
 mod command;
 mod context;
 
+use at_command::{
+    unsolicited::{ConnectionMessage, RegistrationStatus, Urc},
+    ATParseLine,
+};
 use core::fmt::Write as FmtWrite;
 use embassy_executor::time::{with_timeout, Duration, Timer};
 use embassy_util::{
@@ -12,9 +17,9 @@ use heapless::{String, Vec};
 
 use crate::{
     read::{ModemReader, Read},
-    tcp::{TcpMessage, TcpStream},
+    tcp::TcpStream,
     write::Write,
-    Error, ModemPower, RegistrationStatus,
+    Error, ModemPower,
 };
 pub use command::Command;
 pub use context::*;
@@ -161,7 +166,7 @@ impl<'c, P: ModemPower> Modem<'c, P> {
         Ok(responses)
     }
 
-    pub async fn connect_tcp(&mut self, host: &str, port: u16) -> TcpStream<'c> {
+    pub async fn connect_tcp(&mut self, host: &str, port: u16) -> Result<TcpStream<'c>, Error> {
         let tcp_context = self.context.tcp.claim().unwrap();
         self.context.command_mutex.lock().await;
         self.context.commands.send("AT+CIFSR\r".into()).await;
@@ -175,24 +180,24 @@ impl<'c, P: ModemPower> Modem<'c, P> {
             port
         )
         .unwrap();
-        self.run_raw_command(buf.as_str()).await.unwrap(); // TODO: remove unwrap
+        self.run_raw_command(buf.as_str()).await?;
 
         loop {
             match tcp_context.events().recv().await {
-                crate::tcp::TcpMessage::Connected => break,
-                crate::tcp::TcpMessage::ConnectionFailed => panic!(),
+                ConnectionMessage::Connected => break,
+                ConnectionMessage::ConnectionFailed => panic!("connection failed"), //TODO
                 _ => {}
             }
         }
 
-        TcpStream {
+        Ok(TcpStream {
             token: tcp_context,
             command_mutex: &self.context.command_mutex,
             commands: &self.context.commands,
             generic_response: &self.context.generic_response,
             closed: false,
             buffer: Vec::new(),
-        }
+        })
     }
 }
 
@@ -206,77 +211,47 @@ pub struct RxPump<'context, R> {
 impl<'context, R: Read> RxPump<'context, R> {
     pub async fn pump(&mut self) -> Result<(), Error> {
         let line = self.reader.read_line().await?;
-        log::info!("Read from modem: {}", line);
 
-        if line.starts_with("+CGREG:") {
-            let stat = match line
-                .split(&[' ', ','])
-                .nth(2)
-                .unwrap()
-                .parse::<i32>()
-                .unwrap()
-            {
-                1 => RegistrationStatus::RegisteredHome,
-                2 => RegistrationStatus::Searching,
-                3 => RegistrationStatus::RegistrationDenied,
-                4 => RegistrationStatus::Unknown,
-                5 => RegistrationStatus::RegisteredRoaming,
-                _ => RegistrationStatus::NotRegistered,
-            };
-            self.registration_events.signal(stat);
-        } else if line.starts_with("+RECEIVE,") {
-            let mut length = line
-                .split(&[',', ':'])
-                .nth(2)
-                .unwrap()
-                .parse::<usize>()
-                .unwrap();
-            let connection = line
-                .split(&[',', ':'])
-                .nth(1)
-                .unwrap()
-                .parse::<usize>()
-                .unwrap();
+        if line.is_empty() {
+            log::warn!("received empty line from modem");
+        }
 
-            log::info!("Reading {length} bytes from modem");
-            while length > 0 {
-                log::debug!("remaining read: {}", length);
-                let mut buf = Vec::new();
-                buf.resize_default(usize::min(length, 365)).unwrap();
-                self.reader.read_exact(&mut buf).await?;
-                length -= buf.len();
-                self.tcp.rx[connection].send(buf).await;
+        // First, check if it's an unsolicited message
+        if let Ok(message) = Urc::from_line(&line) {
+            log::info!("Got URC: {line:?}");
+            match message {
+                Urc::RegistrationStatus(status) => {
+                    self.registration_events.signal(status);
+                }
+                Urc::ReceiveHeader(header) => {
+                    let mut length = header.length;
+                    let connection = header.connection;
+                    log::info!("Reading {length} bytes from modem");
+                    while length > 0 {
+                        log::debug!("remaining read: {}", length);
+                        let mut buf = Vec::new();
+                        buf.resize_default(usize::min(length, 365)).unwrap();
+                        self.reader.read_exact(&mut buf).await?;
+                        length -= buf.len();
+                        log::info!("Sending {} bytes to tcp connection {connection}", buf.len());
+                        self.tcp.rx[connection].send(buf).await;
+                        log::info!("Bytes sent to tcp connection {connection}");
+                    }
+                    log::info!("Done sending to tcp connection {connection}");
+                }
+                Urc::ConnectionMessage(message) => {
+                    self.tcp.events[message.index].send(message.message).await;
+                }
+                _ => log::warn!("Unhandled URC: {message:?}"),
             }
-        } else if line.ends_with(", CLOSED") {
-            let connection = line.split(&[',']).nth(0).unwrap().parse::<usize>().unwrap();
-            self.tcp.events[connection].send(TcpMessage::Closed).await;
-        } else if line.ends_with(", CLOSE OK") {
-            let connection = line.split(&[',']).nth(0).unwrap().parse::<usize>().unwrap();
-            self.tcp.events[connection].send(TcpMessage::Closed).await;
-        } else if line.ends_with(", SEND OK") {
-            let connection = line.split(&[',']).nth(0).unwrap().parse::<usize>().unwrap();
-            self.tcp.events[connection]
-                .send(TcpMessage::SendSuccess)
-                .await;
-        } else if line.ends_with(", SEND FAIL") {
-            let connection = line.split(&[',']).nth(0).unwrap().parse::<usize>().unwrap();
-            self.tcp.events[connection].send(TcpMessage::SendFail).await;
-        } else if line.ends_with(", CONNECT OK") {
-            let connection = line.split(&[',']).nth(0).unwrap().parse::<usize>().unwrap();
-            self.tcp.events[connection]
-                .send(TcpMessage::Connected)
-                .await;
-        } else if line.ends_with(", CONNECT FAIL") {
-            let connection = line.split(&[',']).nth(0).unwrap().parse::<usize>().unwrap();
-            self.tcp.events[connection]
-                .send(TcpMessage::ConnectionFailed)
-                .await;
         } else {
-            match self.generic_response.try_send(line) {
-                Ok(_) => {}
-                Err(_) => log::info!("message queue full"),
+            // If it's not a URC, it's a response to some command
+            log::info!("Got generic response: {line:?}"); //TODO remove me
+            if self.generic_response.try_send(line).is_err() {
+                log::warn!("message queue full");
             }
         }
+
         Ok(())
     }
 }

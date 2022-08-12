@@ -5,23 +5,16 @@ use core::mem::drop;
 use embassy_util::{
     blocking_mutex::raw::CriticalSectionRawMutex, channel::mpmc::Channel, mutex::Mutex,
 };
+use futures_util::future::Either;
 use heapless::{String, Vec};
 
 use crate::{
+    modem::at_command::unsolicited::ConnectionMessage,
     modem::{Command, TcpToken},
     read::Read,
     write::Write,
     SerialError,
 };
-
-#[derive(PartialEq, Eq)]
-pub enum TcpMessage {
-    SendFail,
-    SendSuccess,
-    Closed,
-    Connected,
-    ConnectionFailed,
-}
 
 #[derive(Debug)]
 pub enum TcpError {
@@ -74,9 +67,9 @@ impl<'s> TcpStream<'s> {
 
         loop {
             match self.token.events().recv().await {
-                TcpMessage::SendFail => return Err(TcpError::SendFail),
-                TcpMessage::SendSuccess => break,
-                TcpMessage::Closed => {
+                ConnectionMessage::SendFail => return Err(TcpError::SendFail),
+                ConnectionMessage::SendSuccess => break,
+                ConnectionMessage::Closed => {
                     self.closed = true;
                     return Err(TcpError::Closed);
                 }
@@ -96,16 +89,26 @@ impl<'s> TcpStream<'s> {
 
         if self.buffer.is_empty() {
             let rx_buffer = loop {
-                match futures_util::future::select(
+                log::info!("{} awaiting rx/event", self.token.ordinal());
+
+                let result = futures_util::future::select(
                     self.token.rx().recv(),
                     self.token.events().recv(),
                 )
-                .await
-                {
-                    futures_util::future::Either::Left((buffer, _)) => break buffer,
-                    futures_util::future::Either::Right((event, _))
-                        if event == TcpMessage::Closed =>
-                    {
+                .await;
+
+                match &result {
+                    Either::Left((buffer, _)) => {
+                        log::info!("{} rx got {} bytes", self.token.ordinal(), buffer.len());
+                    }
+                    Either::Right((event, _)) => {
+                        log::info!("{} event got {event:?}", self.token.ordinal());
+                    }
+                }
+
+                match result {
+                    Either::Left((buffer, _)) => break buffer,
+                    Either::Right((event, _)) if event == ConnectionMessage::Closed => {
                         self.closed = true;
                         return Ok(0);
                     }
@@ -156,13 +159,17 @@ impl<'s> TcpStream<'s> {
             return;
         }
 
+        let guard = self.command_mutex.lock();
+
         let mut buf = String::new();
         write!(buf, "AT+CIPCLOSE={}\r", self.token.ordinal()).unwrap();
         self.commands.send(Command::Text(buf)).await;
 
+        drop(guard);
+
         loop {
             match self.token.events().recv().await {
-                TcpMessage::Closed => break,
+                ConnectionMessage::Closed => break,
                 _ => {}
             }
         }

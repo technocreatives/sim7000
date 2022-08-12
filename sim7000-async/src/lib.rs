@@ -6,6 +6,7 @@ pub mod modem;
 pub mod read;
 pub mod single_arc;
 pub mod tcp;
+mod util;
 pub mod write;
 
 use core::future::Future;
@@ -20,16 +21,6 @@ pub enum Error {
     BufferOverflow,
     SimError,
     Timeout,
-}
-
-#[derive(Copy, Clone, Eq, PartialEq, Debug)]
-pub enum RegistrationStatus {
-    NotRegistered,
-    RegisteredHome,
-    Searching,
-    RegistrationDenied,
-    Unknown,
-    RegisteredRoaming,
 }
 
 #[derive(PartialEq, Eq)]
