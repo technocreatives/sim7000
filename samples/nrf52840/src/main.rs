@@ -21,12 +21,13 @@ use sim7000_async::{
 //#[cfg(debug_assertions)]
 extern crate panic_rtt_target;
 
+type Modem = sim7000_async::modem::Modem<'static, ModemPowerPins>;
 static MODEM_CONTEXT: ModemContext = ModemContext::new();
 
 #[embassy_executor::main]
 async fn main(spawner: Spawner, p: Peripherals) {
     rtt_init_logger!(BlockIfFull);
-    logger::set_level(LevelFilter::Info);
+    logger::set_level(LevelFilter::Debug);
     log::info!("Started");
 
     let irq = interrupt::take!(UARTE0_UART0);
@@ -45,7 +46,7 @@ async fn main(spawner: Spawner, p: Peripherals) {
         reset: Output::new(p.P1_04.degrade(), Level::Low, OutputDrive::Standard),
         ri: Input::new(p.P1_15.degrade(), Pull::Up),
     };
-    let (mut modem, tx_pump, rx_pump) = sim7000_async::modem::Modem::new(
+    let (mut modem, tx_pump, rx_pump) = Modem::new(
         AppUarteRead(rx),
         AppUarteWrite(tx),
         power_pins,
@@ -55,17 +56,26 @@ async fn main(spawner: Spawner, p: Peripherals) {
     .unwrap();
     spawner.must_spawn(rx_pump_task(rx_pump));
     spawner.must_spawn(tx_pump_task(tx_pump));
+
     log::info!("Initializing modem");
     modem.init().await.unwrap();
 
     log::info!("Activating modem");
     modem.activate().await.unwrap();
 
-    log::info!("Sleeping 5s");
-    Timer::after(Duration::from_millis(5000)).await;
+    log::info!("Sleeping 1s");
+    Timer::after(Duration::from_millis(1000)).await;
 
-    example::ping_tcpbin(&mut modem).await.unwrap();
-    example::get_quote_of_the_day(&mut modem).await.unwrap();
+    if example::spawn_ping_tcpbin(&spawner, &mut modem)
+        .await
+        .is_err()
+    {
+        log::error!("Failed to spawn ping_tcpbin");
+    }
+
+    if example::get_quote_of_the_day(&mut modem).await.is_err() {
+        log::error!("Failed to get Quot of the Day");
+    }
 
     log::info!("main() finished");
     loop {
@@ -129,7 +139,7 @@ impl<'d> sim7000_async::read::Read for AppUarteRead<'d> {
             };
 
             if n > 0 {
-                log::info!("Read {n} bytes");
+                log::debug!("Read {n} bytes from modem uarte");
             }
 
             Ok(n)
