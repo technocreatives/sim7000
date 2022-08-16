@@ -63,7 +63,7 @@ async fn main(spawner: Spawner, p: Peripherals) {
     log::info!("Activating modem");
     modem.activate().await.unwrap();
 
-    log::info!("Sleeping 1s");
+    log::info!("sleeping 1s");
     Timer::after(Duration::from_millis(1000)).await;
 
     modem
@@ -75,16 +75,38 @@ async fn main(spawner: Spawner, p: Peripherals) {
         .await
         .expect("enable gnss");
 
-    //if example::spawn_ping_tcpbin(&spawner, &mut modem)
-    //    .await
-    //    .is_err()
-    //{
-    //    log::error!("Failed to spawn ping_tcpbin");
-    //}
+    log::info!("sleeping 5s");
+    Timer::after(Duration::from_millis(5000)).await;
 
-    //if example::get_quote_of_the_day(&mut modem).await.is_err() {
-    //    log::error!("Failed to get Quot of the Day");
-    //}
+    for _ in 0..100 {
+        log::info!("sleeping 1s");
+        Timer::after(Duration::from_millis(1000)).await;
+
+        log::info!("spawning tasks");
+        let tcpbin_handle = example::ping_tcpbin(&spawner, &mut modem)
+            .await
+            .map_err(|e| log::error!("Failed to spawn ping_tcpbin: {e:?}"))
+            .ok();
+
+        let qotd_handle = example::get_quote_of_the_day(&spawner, &mut modem)
+            .await
+            .map_err(|e| log::error!("Failed to spawn Quote of the Day: {e:?}"))
+            .ok();
+
+        log::info!("await tcpbin");
+        if let Some(handle) = tcpbin_handle {
+            if let Err(e) = handle.await {
+                log::error!("ping_tcpbin failed: {e:?}");
+            }
+        }
+
+        log::info!("await QotD");
+        if let Some(handle) = qotd_handle {
+            if let Err(e) = handle.await {
+                log::error!("get QotD failed: {e:?}");
+            }
+        }
+    }
 
     log::info!("main() finished");
     loop {
@@ -138,7 +160,7 @@ impl<'d> sim7000_async::read::Read for AppUarteRead<'d> {
 
     fn read<'a>(&'a mut self, read: &'a mut [u8]) -> Self::ReadFuture<'a> {
         async move {
-            log::debug!("Read until idle");
+            log::trace!("Read until idle");
             let n = match with_timeout(Duration::from_millis(1000), self.0.read_until_idle(read))
                 .await
             {

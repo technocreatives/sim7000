@@ -1,77 +1,135 @@
 #![allow(dead_code)]
 
 use crate::Modem;
-use core::mem::drop;
-use core::str::from_utf8;
+use core::future::Future;
+use core::str::{from_utf8, Utf8Error};
 use embassy_executor::executor::{SpawnError, Spawner};
+use embassy_util::blocking_mutex::raw::CriticalSectionRawMutex;
+use embassy_util::channel::mpmc::Channel;
 use heapless::Vec;
 use sim7000_async::{read::Read, tcp::TcpStream, write::Write};
 
-pub async fn spawn_ping_tcpbin(spawner: &Spawner, modem: &mut Modem) -> Result<(), SpawnError> {
-    log::info!("Connecting to tcpbin.com");
-    let stream = modem.connect_tcp("tcpbin.com", 4242).await.unwrap();
-    spawner.spawn(ping_tcpbin(stream))
+#[derive(Debug)]
+pub enum Error {
+    Spawn(SpawnError),
+    Sim(sim7000_async::Error),
+    Tcp(sim7000_async::tcp::TcpError),
+    Utf8(Utf8Error),
 }
 
-#[embassy_executor::task]
-async fn ping_tcpbin(mut stream: TcpStream<'static>) {
-    log::info!("Sending Marco");
-    const MARCO: &str = "\nFOOBARBAZBOPSHOP\n";
-    stream
-        .write_all(MARCO.as_bytes())
-        .await
-        .expect("Failed to write to tcp stream");
+type TaskResponseChannel<T> = Channel<CriticalSectionRawMutex, Result<T, Error>, 1>;
 
-    log::info!("Reading Polo");
-    let mut buf = [0u8; MARCO.len()];
+pub async fn ping_tcpbin(
+    spawner: &Spawner,
+    modem: &mut Modem,
+) -> Result<impl Future<Output = Result<(), Error>>, Error> {
+    static TASK_CHANNEL: TaskResponseChannel<()> = Channel::new();
 
-    if let Err(e) = stream.read_exact(&mut buf).await {
-        return log::error!("Failed to read polo from stream: {e:?}");
-    }
+    #[embassy_executor::task]
+    async fn task(mut stream: TcpStream<'static>) {
+        TASK_CHANNEL
+            .send(
+                async move {
+                    log::info!("Sending Marco");
+                    const MARCO: &str = "\nFOOBARBAZBOPSHOP\n";
+                    stream.write_all(MARCO.as_bytes()).await?;
 
-    let polo = match from_utf8(&buf) {
-        Ok(s) => s,
-        Err(e) => {
-            log::error!("Response was not utf8: {e}");
-            return;
-        }
-    };
+                    log::info!("Reading Polo");
+                    let mut buf = [0u8; MARCO.len()];
 
-    log::info!(r#"Got response {polo:?}"#,);
+                    stream.read_exact(&mut buf).await?;
 
-    stream.close().await;
-}
+                    let polo = from_utf8(&buf)?;
 
-pub async fn get_quote_of_the_day(modem: &mut Modem) -> Result<(), ()> {
-    log::info!("Getting Quote of the Day");
-    let mut stream = modem.connect_tcp("djxmmx.net", 17).await.map_err(drop)?;
-    let mut buf = Vec::<u8, 1024>::new();
-    loop {
-        let mut tmp = [0u8; 128];
-        let n = stream
-            .read(&mut tmp)
+                    log::info!(r#"Got response {polo:?}"#,);
+
+                    stream.close().await;
+
+                    log::info!("ping_tcpbin done");
+                    Ok(())
+                }
+                .await,
+            )
             .await
-            .expect("Failed to read QotD from stream");
-        if n == 0 {
-            break;
-        }
-
-        if buf.extend_from_slice(&tmp[..n]).is_err() {
-            log::error!("buffer full");
-            return Err(());
-        }
     }
 
-    let quote = match from_utf8(&buf) {
-        Ok(s) => s,
-        Err(e) => {
-            log::error!("Response was not utf8: {e}");
-            return Err(());
-        }
-    };
+    log::info!("Connecting to tcpbin.com");
+    let stream = modem.connect_tcp("tcpbin.com", 4242).await?;
 
-    log::info!("Quote of the Day:\r\n{quote}",);
+    spawner.spawn(task(stream))?;
+    Ok(TASK_CHANNEL.recv())
+}
 
-    stream.close().await;
-    Ok(())
+pub async fn get_quote_of_the_day(
+    spawner: &Spawner,
+    modem: &mut Modem,
+) -> Result<impl Future<Output = Result<(), Error>>, Error> {
+    static TASK_CHANNEL: TaskResponseChannel<()> = Channel::new();
+
+    #[embassy_executor::task]
+    async fn task(mut stream: TcpStream<'static>) {
+        TASK_CHANNEL
+            .send(
+                async move {
+                    let mut buf = Vec::<u8, 1024>::new();
+
+                    loop {
+                        log::info!("QotD call read");
+                        let mut tmp = [0u8; 128];
+                        let n = stream.read(&mut tmp).await?;
+                        log::info!("QotD read {n} bytes");
+                        if n == 0 {
+                            break;
+                        }
+
+                        if buf.extend_from_slice(&tmp[..n]).is_err() {
+                            log::warn!("QotD buffer full");
+                            break;
+                        }
+                    }
+
+                    let quote = from_utf8(&buf)?;
+
+                    log::info!("Quote of the Day:\r\n{quote}");
+
+                    stream.close().await;
+
+                    log::info!("QotD done");
+
+                    Ok(())
+                }
+                .await,
+            )
+            .await
+    }
+
+    log::info!("Getting Quote of the Day");
+    let stream = modem.connect_tcp("djxmmx.net", 17).await?;
+
+    spawner.spawn(task(stream))?;
+    return Ok(TASK_CHANNEL.recv());
+}
+
+impl From<SpawnError> for Error {
+    fn from(e: SpawnError) -> Self {
+        Error::Spawn(e)
+    }
+}
+
+impl From<sim7000_async::Error> for Error {
+    fn from(e: sim7000_async::Error) -> Self {
+        Error::Sim(e)
+    }
+}
+
+impl From<sim7000_async::tcp::TcpError> for Error {
+    fn from(e: sim7000_async::tcp::TcpError) -> Self {
+        Error::Tcp(e)
+    }
+}
+
+impl From<Utf8Error> for Error {
+    fn from(e: Utf8Error) -> Self {
+        Error::Utf8(e)
+    }
 }
