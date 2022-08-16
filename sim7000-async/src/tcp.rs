@@ -42,7 +42,7 @@ impl<'s> TcpStream<'s> {
             return Err(TcpError::Closed);
         }
 
-        let guard = self.command_mutex.lock();
+        let guard = self.command_mutex.lock().await;
 
         let mut buf = String::new();
         write!(buf, "AT+CIPSEND={},{}\r", self.token.ordinal(), words.len()).unwrap();
@@ -159,7 +159,7 @@ impl<'s> TcpStream<'s> {
             return;
         }
 
-        let guard = self.command_mutex.lock();
+        let guard = self.command_mutex.lock().await;
 
         let mut buf = String::new();
         write!(buf, "AT+CIPCLOSE={}\r", self.token.ordinal()).unwrap();
