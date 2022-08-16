@@ -1,4 +1,5 @@
 use core::future::Future;
+use core::str::from_utf8;
 
 use heapless::{String, Vec};
 
@@ -34,42 +35,50 @@ impl<R: Read> ModemReader<R> {
     }
 
     pub async fn read_line(&mut self) -> Result<String<256>, Error> {
+        const MODEM_INPUT_PROMPT: &str = "> ";
+        const CRLF: &str = "\r\n";
         loop {
-            log::debug!("CURRENT BUFFER {:?}", core::str::from_utf8(&self.buffer));
-            if let Some(position) = self.buffer.windows(2).position(|slice| slice == b"\r\n") {
-                self.buffer.rotate_left(position);
-                self.buffer.truncate(self.buffer.len() - position);
+            if !self.buffer.is_empty() {
+                log::debug!("CURRENT BUFFER {:?}", from_utf8(&self.buffer));
+            }
 
-                if let Some(position) = self.buffer[2..]
-                    .windows(2)
-                    .position(|slice| slice == b"\r\n")
-                {
-                    let line_end = position + 2;
-                    let s = core::str::from_utf8(&self.buffer[2..line_end])
-                        .map_err(|_| Error::InvalidUtf8)?;
-                    log::debug!("RECV LINE: {:?}", s);
+            if self.buffer.starts_with(MODEM_INPUT_PROMPT.as_bytes()) {
+                // When the modem outputs a "> " without a CRLF, it's expecting input,
+                // since there is no CRLF we handle this as a special case.
+                // Notably this happens after a CIPSEND command
 
-                    // the sim7000 doesn't remember hardware flow control settings so during initialization it might drop bytes. This will fix a misaligned line reader since the sim7000 never sends empty messages
-                    if s.is_empty() {
-                        self.buffer.rotate_left(line_end);
-                        self.buffer.truncate(self.buffer.len() - line_end);
+                // Remove the prompt from the buffer
+                self.buffer.rotate_left(MODEM_INPUT_PROMPT.len());
+                self.buffer
+                    .truncate(self.buffer.len() - MODEM_INPUT_PROMPT.len());
 
-                        continue;
-                    }
-                    let line = heapless::String::from(s);
+                return Ok(MODEM_INPUT_PROMPT.into());
+            } else if let Some(position) = self
+                .buffer
+                .windows(CRLF.len())
+                .position(|slice| slice == CRLF.as_bytes())
+            {
+                // If we see a line break, the modem has probaly sent us a message
 
-                    self.buffer.rotate_left(line_end + 2);
-                    self.buffer.truncate(self.buffer.len() - (line_end + 2));
+                let line_end = position + CRLF.len();
+                let line = from_utf8(&self.buffer[..position]).map_err(|_| Error::InvalidUtf8)?;
+                log::debug!("RECV LINE: {:?}", line);
 
-                    return Ok(line);
-                } else if self.buffer.len() >= 4 && &self.buffer[2..4] == b"> " {
-                    let s =
-                        core::str::from_utf8(&self.buffer[2..4]).map_err(|_| Error::InvalidUtf8)?;
-                    let line = heapless::String::from(s);
-                    self.buffer.rotate_left(4);
-                    self.buffer.truncate(self.buffer.len() - 4);
-                    return Ok(line);
+                // Ignore empty lines, as well as echoed lines ending with just a CR
+                if line.trim().is_empty() || line.ends_with('\r') {
+                    self.buffer.rotate_left(line_end);
+                    self.buffer.truncate(self.buffer.len() - line_end);
+
+                    continue;
                 }
+
+                let line = heapless::String::from(line);
+
+                // Remove the line from the buffer
+                self.buffer.rotate_left(line_end);
+                self.buffer.truncate(self.buffer.len() - (line_end));
+
+                return Ok(line);
             }
 
             if self.buffer.capacity() - self.buffer.len() == 0 {

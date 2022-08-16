@@ -141,6 +141,7 @@ impl<'c, P: ModemPower> Modem<'c, P> {
         self.run_raw_command("AT+CSTT=\"iot.1nce.net\",\"\",\"\"\r")
             .await?;
         self.run_raw_command("AT+CIICR\r").await?;
+        self.run_raw_command("AT+CIFSREX\r").await?;
 
         Ok(())
     }
@@ -168,8 +169,6 @@ impl<'c, P: ModemPower> Modem<'c, P> {
 
     pub async fn connect_tcp(&mut self, host: &str, port: u16) -> Result<TcpStream<'c>, Error> {
         let tcp_context = self.context.tcp.claim().unwrap();
-        self.context.command_mutex.lock().await;
-        self.context.commands.send("AT+CIFSR\r".into()).await;
 
         let mut buf = heapless::String::<256>::new();
         write!(
@@ -180,7 +179,7 @@ impl<'c, P: ModemPower> Modem<'c, P> {
             port
         )
         .unwrap();
-        self.run_raw_command(buf.as_str()).await?;
+        self.run_raw_command(&buf).await?;
 
         loop {
             match tcp_context.events().recv().await {
@@ -247,8 +246,11 @@ impl<'context, R: Read> RxPump<'context, R> {
         } else {
             // If it's not a URC, it's a response to some command
             log::info!("Got generic response: {line:?}"); //TODO remove me
-            if self.generic_response.try_send(line).is_err() {
-                log::warn!("message queue full");
+            if with_timeout(Duration::from_secs(10), self.generic_response.send(line))
+                .await
+                .is_err()
+            {
+                log::error!("message queue send timed out");
             }
         }
 
