@@ -1,5 +1,6 @@
 use crate::modem::at_command::{ATParseErr, ATParseLine};
 use crate::util::collect_array;
+use core::str::FromStr;
 
 #[derive(Debug, PartialEq)]
 pub enum GnssReport {
@@ -44,22 +45,31 @@ impl ATParseLine for GnssReport {
             });
         }
 
+        /// Parse a string to a value, returning the default if the string is empty
+        fn parse_optional<T: FromStr + Default>(s: &str) -> Result<T, <T as FromStr>::Error> {
+            if s.is_empty() {
+                Ok(T::default())
+            } else {
+                s.parse()
+            }
+        }
+
         Ok(GnssReport::Fix {
             latitude: latitude.parse()?,
             longitude: longitude.parse()?,
             altitude: msl_altitude.parse()?,
-            speed_over_ground: speed_over_groud.parse()?,
-            course_over_ground: course_over_ground.parse()?,
-            hdop: hdop.parse().unwrap_or(0.0),
-            pdop: pdop.parse().unwrap_or(0.0),
-            vdop: vdop.parse().unwrap_or(0.0),
-            signal_noise_ratio: c_n0_max.parse()?,
+            speed_over_ground: parse_optional(speed_over_groud)?,
+            course_over_ground: parse_optional(course_over_ground)?,
+            hdop: parse_optional(hdop)?,
+            pdop: parse_optional(pdop)?,
+            vdop: parse_optional(vdop)?,
+            signal_noise_ratio: parse_optional(c_n0_max)?,
 
             // The docs contradicts itself on what these values are and what they are called
             // TODO: Make sure these are correct.
-            sat_gps_in_view: sat_gps_in_view.parse()?,
-            sat_gnss_used: sat_gnss_used.parse()?,
-            sat_glonass_used: sat_glonass_used.parse().unwrap_or(0),
+            sat_gps_in_view: parse_optional(sat_gps_in_view)?,
+            sat_gnss_used: parse_optional(sat_gnss_used)?,
+            sat_glonass_used: parse_optional(sat_glonass_used)?,
         })
     }
 }
