@@ -11,14 +11,14 @@ pub struct IncomingConnection {
 
 impl ATParseLine for IncomingConnection {
     fn from_line(line: &str) -> Result<Self, ATParseErr> {
-        let (message, ip) = line.split_once(": ").ok_or(ATParseErr)?;
+        let (message, ip) = line.split_once(": ").ok_or("Missing ': '")?;
         if message != "REMOTE IP" {
-            return Err(ATParseErr);
+            return Err("Missing 'REMOTE IP'".into());
         }
 
         Ok(IncomingConnection {
             remote_ip: collect_array(ip.splitn(4, '.').filter_map(|segment| segment.parse().ok()))
-                .ok_or(ATParseErr)?,
+                .ok_or("Couldn't parse IP addr")?,
         })
     }
 }

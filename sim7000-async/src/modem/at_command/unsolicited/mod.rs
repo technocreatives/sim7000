@@ -75,7 +75,7 @@ impl ATParseLine for Urc {
             move |_| Ok(f(T::from_line(line)?))
         }
 
-        Err(ATParseErr)
+        Err(ATParseErr::default())
             .or_else(parse(line, Urc::AppNetworkActive))
             .or_else(parse(line, Urc::CFun))
             .or_else(parse(line, Urc::CPin))
@@ -94,11 +94,11 @@ impl ATParseLine for Urc {
             .or_else(parse(line, Urc::ReceiveHeader))
             .or_else(parse(line, Urc::RegistrationStatus))
             .or_else(parse(line, Urc::VoltageWarning))
+            .map_err(|_| ATParseErr::from("Failed to parse as a URC"))
     }
 }
 
 //TODO: ----
-// `REMOTE IP: <ip>` Someone connected to us
 // `+CDNSGIP: 1,<domain name>,<ip>[,<ip2>]` dns
 // `+CDNSGIP: 0,<dns error code>` no dns me sad
 //mod cmti;

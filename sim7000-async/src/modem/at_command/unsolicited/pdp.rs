@@ -7,6 +7,6 @@ impl ATParseLine for GprsDisconnected {
     fn from_line(line: &str) -> Result<Self, ATParseErr> {
         line.eq("+PDP: DEACT")
             .then(|| GprsDisconnected)
-            .ok_or(ATParseErr)
+            .ok_or("Missing '+PDP: DEACT'".into())
     }
 }

@@ -9,17 +9,17 @@ pub enum VoltageWarning {
 
 impl ATParseLine for VoltageWarning {
     fn from_line(line: &str) -> Result<Self, ATParseErr> {
-        let (reason, message) = line.split_once(' ').ok_or(ATParseErr)?;
+        let (reason, message) = line.split_once(' ').ok_or("Missing ' '")?;
 
         // looks like a typo in the documentation
         if !["WARNNING", "WARNING"].contains(&message) {
-            return Err(ATParseErr);
+            return Err("Missing 'WARNING'".into());
         }
 
         match reason {
             "UNDER-VOLTAGE" => Ok(VoltageWarning::UnderVoltage),
             "OVER-VOLTAGE" => Ok(VoltageWarning::OverVoltage),
-            _ => Err(ATParseErr),
+            _ => Err("Invalid reason, expected OVER or UNDER-VOLTAGE".into()),
         }
     }
 }

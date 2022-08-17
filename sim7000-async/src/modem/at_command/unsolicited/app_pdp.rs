@@ -9,7 +9,7 @@ impl ATParseLine for AppNetworkActive {
         match line {
             "+APP PDP: ACTIVE" => Ok(AppNetworkActive(true)),
             "+APP PDP: DEACTIVE" => Ok(AppNetworkActive(false)),
-            _ => Err(ATParseErr),
+            _ => Err("Expecting '+APP PDP: ACTIVE/DEACTIVE'".into()),
         }
     }
 }

@@ -13,12 +13,16 @@ pub enum RegistrationStatus {
 
 impl ATParseLine for RegistrationStatus {
     fn from_line(line: &str) -> Result<Self, ATParseErr> {
-        let (message, rest) = line.split_once(": ").ok_or(ATParseErr)?;
+        let (message, rest) = line.split_once(": ").ok_or("Missing ': '")?;
         if message != "+CGREG" {
-            return Err(ATParseErr);
+            return Err("Missing '+CGREG'".into());
         }
 
-        let stat = rest.split(',').nth(1).ok_or(ATParseErr)?.parse::<i32>()?;
+        let stat = rest
+            .split(',')
+            .nth(1)
+            .ok_or("Missing ','")?
+            .parse::<i32>()?;
 
         Ok(match stat {
             1 => RegistrationStatus::RegisteredHome,

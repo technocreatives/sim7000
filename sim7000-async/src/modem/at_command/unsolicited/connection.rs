@@ -29,7 +29,7 @@ pub enum ConnectionMessage {
 
 impl ATParseLine for Connection {
     fn from_line(line: &str) -> Result<Self, ATParseErr> {
-        let (index, message) = line.split_once(", ").ok_or(ATParseErr)?;
+        let (index, message) = line.split_once(", ").ok_or("Missing ', '")?;
         let index = index.parse()?;
 
         use ConnectionMessage::*;
@@ -41,7 +41,7 @@ impl ATParseLine for Connection {
             "CONNECT FAIL" => ConnectionFailed,
             "ALREADY CONNECT" => AlreadyConnected,
             _ => {
-                return Err(ATParseErr);
+                return Err("Invalid connection message".into());
             }
         };
 
