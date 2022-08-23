@@ -1,6 +1,5 @@
 use core::future::Future;
 use core::str::from_utf8;
-
 use heapless::{String, Vec};
 
 use crate::{Error, SerialError};
@@ -90,7 +89,7 @@ impl<R: Read> ModemReader<R> {
                 .read
                 .read(&mut buf[..self.buffer.capacity() - self.buffer.len()])
                 .await
-                .map_err(|_| Error::SimError)?; // TODO: figure out error types
+                .map_err(|_| Error::Serial)?; // TODO: figure out error types
 
             self.buffer
                 .extend_from_slice(&buf[..amount])
@@ -108,7 +107,7 @@ impl<R: Read> ModemReader<R> {
             self.read
                 .read_exact(&mut buf[self.buffer.len()..])
                 .await
-                .map_err(|_| Error::SimError)?; // TODO: figure out error types
+                .map_err(|_| Error::Serial)?; // TODO: figure out error types
             self.buffer.clear();
         }
 

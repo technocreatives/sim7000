@@ -4,37 +4,52 @@ use embassy_util::{
     blocking_mutex::raw::CriticalSectionRawMutex, channel::mpmc::Channel, channel::signal::Signal,
     mutex::Mutex,
 };
-use heapless::{String, Vec};
+use heapless::Vec;
 
-use super::Command;
-use crate::modem::at_command::unsolicited::{ConnectionMessage, RegistrationStatus};
+use super::{CommandRunner, RawAtCommand};
+use crate::at_command::{
+    response::ResponseCode,
+    unsolicited::{ConnectionMessage, GnssReport, RegistrationStatus},
+};
+use crate::drop::DropChannel;
+use crate::tcp::CONNECTION_SLOTS;
 
-pub type TcpRxChannel = Channel<CriticalSectionRawMutex, Vec<u8, 365>, 8>;
+pub type TcpRxChannel = Channel<CriticalSectionRawMutex, Vec<u8, 365>, CONNECTION_SLOTS>;
 
 pub struct ModemContext {
-    pub(crate) command_mutex: Mutex<CriticalSectionRawMutex, ()>,
-    pub(crate) commands: Channel<CriticalSectionRawMutex, Command, 4>,
-    pub(crate) generic_response: Channel<CriticalSectionRawMutex, String<256>, 1>,
+    pub(crate) command_lock: Mutex<CriticalSectionRawMutex, ()>,
+    pub(crate) commands: Channel<CriticalSectionRawMutex, RawAtCommand, 4>,
+    pub(crate) generic_response: Channel<CriticalSectionRawMutex, ResponseCode, 1>,
+    pub(crate) drop_channel: DropChannel,
     pub(crate) tcp: TcpContext,
     pub(crate) registration_events: Signal<RegistrationStatus>,
+    pub(crate) gnss_slot: AtomicBool,
+    pub(crate) gnss_reports: Signal<GnssReport>,
 }
 
 impl ModemContext {
     pub const fn new() -> Self {
         ModemContext {
-            command_mutex: Mutex::new(()),
+            command_lock: Mutex::new(()),
             commands: Channel::new(),
             generic_response: Channel::new(),
+            drop_channel: DropChannel::new(),
             tcp: TcpContext::new(),
             registration_events: Signal::new(),
+            gnss_slot: AtomicBool::new(true),
+            gnss_reports: Signal::new(),
         }
+    }
+
+    pub fn commands(&self) -> CommandRunner<'_> {
+        CommandRunner::create(self)
     }
 }
 
 pub struct TcpContext {
-    pub(crate) rx: [TcpRxChannel; 8],
-    pub(crate) events: [Channel<CriticalSectionRawMutex, ConnectionMessage, 4>; 8],
-    pub(crate) slots: [AtomicBool; 8],
+    pub(crate) rx: [TcpRxChannel; CONNECTION_SLOTS],
+    pub(crate) events: [Channel<CriticalSectionRawMutex, ConnectionMessage, 4>; CONNECTION_SLOTS],
+    pub(crate) slots: [AtomicBool; CONNECTION_SLOTS],
 }
 
 impl TcpContext {
@@ -110,10 +125,8 @@ impl<'c> TcpToken<'c> {
     pub fn events(&self) -> &'c Channel<CriticalSectionRawMutex, ConnectionMessage, 4> {
         self.events
     }
-}
 
-impl<'c> Drop for TcpToken<'c> {
-    fn drop(&mut self) {
+    pub fn close(&self) {
         self.slot.fetch_or(true, Ordering::Relaxed);
     }
 }

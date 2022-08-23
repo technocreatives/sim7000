@@ -13,16 +13,12 @@ use embassy_nrf::{
     gpio::{AnyPin, Input, Level, Output, OutputDrive, Pin, Pull},
     interrupt, uarte, Peripherals,
 };
-use sim7000_async::{
-    modem::{ModemContext, RxPump, TxPump},
-    ModemPower, PowerState,
-};
+use sim7000_async::{modem::ModemContext, spawn_modem, ModemPower, PowerState};
 
 //#[cfg(debug_assertions)]
 extern crate panic_rtt_target;
 
 type Modem = sim7000_async::modem::Modem<'static, ModemPowerPins>;
-static MODEM_CONTEXT: ModemContext = ModemContext::new();
 
 #[embassy_executor::main]
 async fn main(spawner: Spawner, p: Peripherals) {
@@ -46,16 +42,13 @@ async fn main(spawner: Spawner, p: Peripherals) {
         reset: Output::new(p.P1_04.degrade(), Level::Low, OutputDrive::Standard),
         ri: Input::new(p.P1_15.degrade(), Pull::Up),
     };
-    let (mut modem, tx_pump, rx_pump) = Modem::new(
-        AppUarteRead(rx),
-        AppUarteWrite(tx),
-        power_pins,
-        &MODEM_CONTEXT,
-    )
-    .await
-    .unwrap();
-    spawner.must_spawn(rx_pump_task(rx_pump));
-    spawner.must_spawn(tx_pump_task(tx_pump));
+
+    let mut modem = spawn_modem!(
+        &spawner,
+        AppUarteRead<'static> as AppUarteRead(rx),
+        AppUarteWrite<'static> as AppUarteWrite(tx),
+        power_pins
+    );
 
     log::info!("Initializing modem");
     modem.init().await.unwrap();
@@ -66,14 +59,12 @@ async fn main(spawner: Spawner, p: Peripherals) {
     log::info!("sleeping 1s");
     Timer::after(Duration::from_millis(1000)).await;
 
-    modem
-        .run_raw_command("AT+CGNSPWR=1\r")
-        .await
-        .expect("enable gnss");
-    modem
-        .run_raw_command("AT+CGNSURC=2\r")
-        .await
-        .expect("enable gnss");
+    match modem.subscribe_to_gnss().await {
+        Ok(gnss) => spawner.must_spawn(example::gnss(gnss.unwrap())),
+        Err(e) => {
+            log::error!("Failed to subscribe to GNSS: {e:?}");
+        }
+    }
 
     log::info!("sleeping 5s");
     Timer::after(Duration::from_millis(5000)).await;
@@ -111,24 +102,6 @@ async fn main(spawner: Spawner, p: Peripherals) {
     log::info!("main() finished");
     loop {
         Timer::after(Duration::from_millis(300)).await;
-    }
-}
-
-#[embassy_executor::task]
-async fn rx_pump_task(mut pump: RxPump<'static, AppUarteRead<'static>>) {
-    loop {
-        if let Err(err) = pump.pump().await {
-            log::error!("Issue running modem receiver pump {:?}", err);
-        }
-    }
-}
-
-#[embassy_executor::task]
-async fn tx_pump_task(mut pump: TxPump<'static, AppUarteWrite<'static>>) {
-    loop {
-        if let Err(err) = pump.pump().await {
-            log::error!("Issue running modem receiver pump {:?}", err);
-        }
     }
 }
 

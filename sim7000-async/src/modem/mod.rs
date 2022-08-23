@@ -1,27 +1,24 @@
-pub mod at_command;
 mod command;
 mod context;
 
-use at_command::{
-    unsolicited::{ConnectionMessage, RegistrationStatus, Urc},
-    ATParseLine,
-};
-use core::fmt::Write as FmtWrite;
+use core::sync::atomic::Ordering;
 use embassy_executor::time::{with_timeout, Duration, Timer};
-use embassy_util::{
-    blocking_mutex::raw::CriticalSectionRawMutex,
-    channel::mpmc::{Receiver, Sender},
-    channel::signal::Signal,
-};
-use heapless::{String, Vec};
+use heapless::Vec;
 
 use crate::{
+    at_command::{
+        request::*,
+        unsolicited::{ConnectionMessage, RegistrationStatus},
+    },
+    drop::{AsyncDrop, DropMessage},
+    gnss::Gnss,
+    pump::{DropPump, RxPump, TxPump},
     read::{ModemReader, Read},
     tcp::TcpStream,
     write::Write,
     Error, ModemPower,
 };
-pub use command::Command;
+pub use command::{CommandRunner, CommandRunnerGuard, RawAtCommand};
 pub use context::*;
 
 pub struct Uninitialized;
@@ -31,6 +28,7 @@ pub struct Sleeping;
 
 pub struct Modem<'c, P> {
     context: &'c ModemContext,
+    commands: CommandRunner<'c>,
     power: P,
 }
 
@@ -40,14 +38,19 @@ impl<'c, P: ModemPower> Modem<'c, P> {
         tx: W,
         power: P,
         context: &'c ModemContext,
-    ) -> Result<(Modem<'c, P>, TxPump<'c, W>, RxPump<'c, R>), Error> {
-        let modem = Modem { context, power };
+    ) -> Result<(Modem<'c, P>, TxPump<'c, W>, RxPump<'c, R>, DropPump<'c>), Error> {
+        let modem = Modem {
+            commands: context.commands(),
+            context,
+            power,
+        };
 
         let rx_pump = RxPump {
             reader: ModemReader::new(rx),
             generic_response: context.generic_response.sender(),
-            tcp: &context.tcp,
             registration_events: &context.registration_events,
+            tcp: &context.tcp,
+            gnss: &context.gnss_reports,
         };
 
         let tx_pump = TxPump {
@@ -55,16 +58,24 @@ impl<'c, P: ModemPower> Modem<'c, P> {
             commands: context.commands.receiver(),
         };
 
-        Ok((modem, tx_pump, rx_pump))
+        let drop_pump = DropPump { context };
+
+        Ok((modem, tx_pump, rx_pump, drop_pump))
     }
 
     pub async fn init(&mut self) -> Result<(), Error> {
         self.power.disable().await;
         self.power.enable().await;
 
+        let commands = self.commands.lock().await;
+        let set_flow_control = SetFlowControl {
+            dce_by_dte: FlowControl::Hardware,
+            dte_by_dce: FlowControl::Hardware,
+        };
+
         for _ in 0..5 {
             match with_timeout(Duration::from_millis(2000), async {
-                self.run_raw_command("AT+IFC=2,2\r").await
+                commands.run(set_flow_control).await
             })
             .await
             {
@@ -72,21 +83,30 @@ impl<'c, P: ModemPower> Modem<'c, P> {
                 _ => {}
             }
         }
-        self.run_raw_command("AT+CSCLK=0\r").await?;
-        self.run_raw_command("AT\r").await?;
-        self.run_raw_command("AT+IPR=115200\r").await?;
-        self.run_raw_command("AT+IFC=2,2\r").await?;
-        self.run_raw_command("AT+CMEE=1\r").await?;
-        self.run_raw_command("AT+CNMP=38\r").await?;
-        self.run_raw_command("AT+CMNB=1\r").await?;
-        self.run_raw_command("AT+CFGRI=1\r").await?;
+        commands.run(csclk::SetSlowClock(false)).await?;
+        commands.run(At).await?;
+        commands.run(ipr::SetBaudRate(BaudRate::Hz115200)).await?;
+        commands.run(set_flow_control).await?;
+        commands
+            .run(cmee::ConfigureCMEErrors(CMEErrorMode::Numeric))
+            .await?;
+        commands.run(cnmp::SetNetworkMode(NetworkMode::Lte)).await?;
+        commands.run(cmnb::SetNbMode(NbMode::CatM)).await?;
+        commands.run(cfgri::ConfigureRiPin(RiPinMode::On)).await?;
+
+        let configure_edrx = cedrxs::ConfigureEDRX {
+            n: EDRXSetting::Enable,
+            act_type: AcTType::CatM,
+            requested_edrx_value: 0b0000,
+        };
+
         for _ in 0..5 {
-            match self.run_raw_command("AT+CEDRXS=1,4,\"0000\"\r").await {
+            match commands.run(configure_edrx).await {
                 Ok(_) => break,
                 _ => Timer::after(Duration::from_millis(200 as u64)).await,
             }
         }
-        self.run_raw_command("AT+CEDRXS=1,4,\"0000\"\r").await?;
+        commands.run(configure_edrx).await?;
 
         self.power.disable().await;
         Ok(())
@@ -94,9 +114,16 @@ impl<'c, P: ModemPower> Modem<'c, P> {
 
     pub async fn activate(&mut self) -> Result<(), Error> {
         self.power.enable().await;
+        let set_flow_control = ifc::SetFlowControl {
+            dce_by_dte: FlowControl::Hardware,
+            dte_by_dce: FlowControl::Hardware,
+        };
+
+        let commands = self.commands.lock().await;
+
         for _ in 0..5 {
             match with_timeout(Duration::from_millis(2000), async {
-                self.run_raw_command("AT+IFC=2,2\r").await
+                commands.run(set_flow_control).await
             })
             .await
             {
@@ -104,22 +131,24 @@ impl<'c, P: ModemPower> Modem<'c, P> {
                 _ => {}
             }
         }
-        self.run_raw_command("ATE0\r").await?;
+        commands.run(ate::SetEcho(false)).await?;
+        commands
+            .run(cgreg::ConfigureRegistrationUrc::EnableRegLocation)
+            .await?;
 
-        self.run_raw_command("AT+CGREG=2\r").await?;
-        self.wait_for_registration().await?;
-        self.run_raw_command("AT+CIPMUX=1\r").await?;
-        //self.run_raw_command("AT+CIPSPRT=0\r").await?;
-        self.run_raw_command("AT+CIPSHUT\r").await.unwrap();
+        self.wait_for_registration(&commands).await?;
 
-        self.authenticate().await?;
+        commands.run(cipmux::EnableMultiIpConnection(true)).await?;
+        commands.run(cipshut::ShutConnections).await?;
+
+        self.authenticate(&commands).await?;
         Ok(())
     }
 
-    async fn wait_for_registration(&mut self) -> Result<(), Error> {
+    async fn wait_for_registration(&self, commands: &CommandRunnerGuard<'_>) -> Result<(), Error> {
         loop {
             match with_timeout(Duration::from_millis(2000), async {
-                self.run_raw_command("AT+CGREG?\r").await
+                commands.run(cgreg::GetRegistrationStatus).await
             })
             .await
             {
@@ -137,49 +166,35 @@ impl<'c, P: ModemPower> Modem<'c, P> {
         Ok(())
     }
 
-    async fn authenticate(&mut self) -> Result<(), Error> {
-        self.run_raw_command("AT+CSTT=\"iot.1nce.net\",\"\",\"\"\r")
+    async fn authenticate(&self, commands: &CommandRunnerGuard<'_>) -> Result<(), Error> {
+        commands
+            .run(cstt::StartTask {
+                apn: "iot.1nce.net".into(),
+                username: "".into(),
+                password: "".into(),
+            })
             .await?;
-        self.run_raw_command("AT+CIICR\r").await?;
-        self.run_raw_command("AT+CIFSREX\r").await?;
+
+        commands.run(ciicr::StartGprs).await?;
+
+        let (_ip, _) = commands.run(cifsrex::GetLocalIpExt).await?;
 
         Ok(())
-    }
-
-    pub async fn run_raw_command(&self, command: &str) -> Result<Vec<String<32>, 4>, Error> {
-        let lock = self.context.command_mutex.lock().await;
-        self.context.commands.send(command.into()).await;
-
-        let mut responses = Vec::new();
-        loop {
-            match self.context.generic_response.recv().await.as_str() {
-                "OK" | "SHUT OK" => break,
-                "ERROR" => return Err(Error::SimError),
-                res if res.starts_with("+CME ERROR") => return Err(Error::SimError),
-                res => {
-                    responses
-                        .push(res.into())
-                        .map_err(|_| Error::BufferOverflow)?;
-                }
-            }
-        }
-        drop(lock);
-        Ok(responses)
     }
 
     pub async fn connect_tcp(&mut self, host: &str, port: u16) -> Result<TcpStream<'c>, Error> {
         let tcp_context = self.context.tcp.claim().unwrap();
 
-        let mut buf = heapless::String::<256>::new();
-        write!(
-            buf,
-            "AT+CIPSTART={},\"TCP\",\"{}\",\"{}\"\r",
-            tcp_context.ordinal(),
-            host,
-            port
-        )
-        .unwrap();
-        self.run_raw_command(&buf).await?;
+        self.commands
+            .lock()
+            .await
+            .run(cipstart::Connect {
+                mode: ConnectMode::Tcp,
+                number: tcp_context.ordinal(),
+                destination: host.try_into().map_err(|_| Error::BufferOverflow)?,
+                port,
+            })
+            .await?;
 
         loop {
             match tcp_context.events().recv().await {
@@ -190,105 +205,39 @@ impl<'c, P: ModemPower> Modem<'c, P> {
         }
 
         Ok(TcpStream {
+            _drop: AsyncDrop::new(
+                &self.context.drop_channel,
+                DropMessage::Connection(tcp_context.ordinal()),
+            ),
             token: tcp_context,
-            command_mutex: &self.context.command_mutex,
-            commands: &self.context.commands,
-            generic_response: &self.context.generic_response,
+            commands: self.commands.clone(),
             closed: false,
             buffer: Vec::new(),
         })
     }
-}
 
-pub struct RxPump<'context, R> {
-    reader: ModemReader<R>,
-    generic_response: Sender<'context, CriticalSectionRawMutex, heapless::String<256>, 1>,
-    tcp: &'context TcpContext,
-    registration_events: &'context Signal<RegistrationStatus>,
-}
-
-impl<'context, R: Read> RxPump<'context, R> {
-    pub async fn pump(&mut self) -> Result<(), Error> {
-        let line = self.reader.read_line().await?;
-
-        if line.is_empty() {
-            log::warn!("received empty line from modem");
+    pub async fn subscribe_to_gnss(&mut self) -> Result<Option<Gnss<'c>>, Error> {
+        if !self.context.gnss_slot.fetch_and(false, Ordering::Relaxed) {
+            return Ok(None);
         }
 
-        // First, check if it's an unsolicited message
-        if let Ok(message) = Urc::from_line(&line) {
-            log::info!("Got URC: {line:?}");
-            match message {
-                Urc::RegistrationStatus(status) => {
-                    self.registration_events.signal(status);
-                }
-                Urc::ReceiveHeader(header) => {
-                    let mut length = header.length;
-                    let connection = header.connection;
-                    log::info!("Reading {length} bytes from modem");
-                    while length > 0 {
-                        log::debug!("remaining read: {}", length);
-                        let mut buf = Vec::new();
-                        buf.resize_default(usize::min(length, 365)).unwrap();
-                        self.reader.read_exact(&mut buf).await?;
-                        length -= buf.len();
-                        log::info!("Sending {} bytes to tcp connection {connection}", buf.len());
-                        self.tcp.rx[connection].send(buf).await;
-                        log::info!("Bytes sent to tcp connection {connection}");
-                    }
-                    log::info!("Done sending to tcp connection {connection}");
-                }
-                Urc::ConnectionMessage(message) => {
-                    self.tcp.events[message.index].send(message.message).await;
-                }
-                _ => log::warn!("Unhandled URC: {message:?}"),
-            }
-        } else {
-            // If it's not a URC, it's a response to some command
-            log::info!("Got generic response: {line:?}"); //TODO remove me
-            if with_timeout(Duration::from_secs(10), self.generic_response.send(line))
-                .await
-                .is_err()
-            {
-                log::error!("message queue send timed out");
-            }
-        }
+        self.commands
+            .lock()
+            .await
+            .run(cgnspwr::SetGnssPower(true))
+            .await?;
 
-        Ok(())
-    }
-}
+        self.commands
+            .lock()
+            .await
+            .run(cgnsurc::ConfigureGnssUrc {
+                period: 4, // TODO
+            })
+            .await?;
 
-pub struct TxPump<'context, W> {
-    writer: W,
-    commands: Receiver<'context, CriticalSectionRawMutex, Command, 4>,
-}
-
-impl<'context, W: Write> TxPump<'context, W> {
-    pub async fn pump(&mut self) -> Result<(), W::Error> {
-        let command = self.commands.recv().await;
-        match &command {
-            Command::Text(text) => log::info!("Write to modem: {text}"),
-            Command::Binary(bytes) => log::info!("Write {} bytes to modem", bytes.len()),
-        }
-        self.writer.write_all(command.as_bytes()).await?;
-
-        Ok(())
-    }
-}
-
-pub struct RegistrationHandler<'context> {
-    context: &'context Signal<RegistrationStatus>,
-}
-
-impl<'context> RegistrationHandler<'context> {
-    pub async fn pump(&mut self) {
-        match self.context.wait().await {
-            RegistrationStatus::NotRegistered
-            | RegistrationStatus::Searching
-            | RegistrationStatus::RegistrationDenied
-            | RegistrationStatus::Unknown => todo!(),
-            RegistrationStatus::RegisteredHome => todo!(),
-            RegistrationStatus::RegisteredRoaming => todo!(),
-        }
+        Ok(Some(Gnss {
+            _drop: AsyncDrop::new(&self.context.drop_channel, DropMessage::Gnss),
+            reports: &self.context.gnss_reports,
+        }))
     }
 }

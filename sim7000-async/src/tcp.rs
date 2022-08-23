@@ -1,20 +1,19 @@
-use core::cmp::min;
-use core::fmt::Write as WriteFmt;
 use core::future::Future;
-use core::mem::drop;
-use embassy_util::{
-    blocking_mutex::raw::CriticalSectionRawMutex, channel::mpmc::Channel, mutex::Mutex,
-};
 use futures_util::future::Either;
-use heapless::{String, Vec};
+use heapless::Vec;
 
 use crate::{
-    modem::at_command::unsolicited::ConnectionMessage,
-    modem::{Command, TcpToken},
+    at_command::request::cipsend,
+    at_command::unsolicited::ConnectionMessage,
+    drop::AsyncDrop,
+    modem::{CommandRunner, TcpToken},
     read::Read,
     write::Write,
     SerialError,
 };
+
+/// The maximum number of parallel connections supported by the modem
+pub const CONNECTION_SLOTS: usize = 8;
 
 #[derive(Debug)]
 pub enum TcpError {
@@ -24,12 +23,11 @@ pub enum TcpError {
 }
 
 pub struct TcpStream<'s> {
-    pub token: TcpToken<'s>,
-    pub command_mutex: &'s Mutex<CriticalSectionRawMutex, ()>,
-    pub commands: &'s Channel<CriticalSectionRawMutex, Command, 4>,
-    pub generic_response: &'s Channel<CriticalSectionRawMutex, String<256>, 1>,
-    pub closed: bool,
-    pub buffer: Vec<u8, 365>,
+    pub(crate) token: TcpToken<'s>,
+    pub(crate) _drop: AsyncDrop<'s>,
+    pub(crate) commands: CommandRunner<'s>,
+    pub(crate) closed: bool,
+    pub(crate) buffer: Vec<u8, 365>,
 }
 
 impl<'s> SerialError for TcpStream<'s> {
@@ -42,28 +40,17 @@ impl<'s> TcpStream<'s> {
             return Err(TcpError::Closed);
         }
 
-        let guard = self.command_mutex.lock().await;
+        let commands = self.commands.lock().await;
 
-        let mut buf = String::new();
-        write!(buf, "AT+CIPSEND={},{}\r", self.token.ordinal(), words.len()).unwrap();
-        self.commands.send(Command::Text(buf)).await;
+        commands
+            .run(cipsend::IpSend {
+                connection: self.token.ordinal(),
+                data_length: words.len(),
+            })
+            .await
+            .map_err(|_| TcpError::SendFail)?;
 
-        loop {
-            match self.generic_response.recv().await.as_str() {
-                "> " => break,
-                "ERROR" => return Err(TcpError::SendFail),
-                _ => {}
-            }
-        }
-
-        let mut words = words;
-        while !words.is_empty() {
-            let mut chunk = Vec::new();
-            let n = min(chunk.capacity(), words.len());
-            chunk.extend_from_slice(&words[..n]).ok();
-            words = &words[n..];
-            self.commands.send(Command::Binary(chunk)).await;
-        }
+        commands.send_bytes(words).await;
 
         loop {
             match self.token.events().recv().await {
@@ -76,8 +63,6 @@ impl<'s> TcpStream<'s> {
                 _ => panic!(),
             }
         }
-
-        drop(guard);
 
         Ok(())
     }
@@ -151,44 +136,13 @@ impl<'s> TcpStream<'s> {
             Ok(())
         }
     }
-
-    // TODO FIXME: if you close the stream without reading all the data, you might find that data on a
-    // future unreleated stream
-    pub async fn close(mut self) {
-        if self.closed {
-            return;
-        }
-
-        let guard = self.command_mutex.lock().await;
-
-        let mut buf = String::new();
-        write!(buf, "AT+CIPCLOSE={}\r", self.token.ordinal()).unwrap();
-        self.commands.send(Command::Text(buf)).await;
-
-        drop(guard);
-
-        loop {
-            match self.token.events().recv().await {
-                ConnectionMessage::Closed => break,
-                _ => {}
-            }
-        }
-
-        // clear read buffer
-        // TODO: i'm not sure if this is enough to clear the buffer,
-        // if the channel is full and the RxPump is blocked, more stuff might be added later
-        while self.token.rx().try_recv().is_ok() {}
-
-        self.closed = true;
-    }
 }
 
 impl Drop for TcpStream<'_> {
     fn drop(&mut self) {
-        if !self.closed {
-            // I pray for async destructors
-            log::warn!("TcpStream::close was not called before dropping");
-        }
+        // TODO: it's likely not sufficient to clear the buffer like this,
+        // if the channel is full and the RxPump is blocked, more stuff might be added later
+        while self.token.rx().try_recv().is_ok() {}
     }
 }
 

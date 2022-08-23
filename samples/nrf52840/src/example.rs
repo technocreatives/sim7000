@@ -7,7 +7,7 @@ use embassy_executor::executor::{SpawnError, Spawner};
 use embassy_util::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_util::channel::mpmc::Channel;
 use heapless::Vec;
-use sim7000_async::{read::Read, tcp::TcpStream, write::Write};
+use sim7000_async::{gnss::Gnss, read::Read, tcp::TcpStream, write::Write};
 
 #[derive(Debug)]
 pub enum Error {
@@ -18,6 +18,14 @@ pub enum Error {
 }
 
 type TaskResponseChannel<T> = Channel<CriticalSectionRawMutex, Result<T, Error>, 1>;
+
+#[embassy_executor::task]
+pub async fn gnss(gnss: Gnss<'static>) {
+    loop {
+        let report = gnss.report().await;
+        log::info!("GNSS report: {report:?}");
+    }
+}
 
 pub async fn ping_tcpbin(
     spawner: &Spawner,
@@ -43,9 +51,6 @@ pub async fn ping_tcpbin(
 
                     log::info!(r#"Got response {polo:?}"#,);
 
-                    stream.close().await;
-
-                    log::info!("ping_tcpbin done");
                     Ok(())
                 }
                 .await,
@@ -91,10 +96,6 @@ pub async fn get_quote_of_the_day(
                     let quote = from_utf8(&buf)?;
 
                     log::info!("Quote of the Day:\r\n{quote}");
-
-                    stream.close().await;
-
-                    log::info!("QotD done");
 
                     Ok(())
                 }
