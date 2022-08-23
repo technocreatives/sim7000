@@ -19,6 +19,7 @@ mod psuttz;
 mod rdy;
 mod receive;
 mod remote_ip;
+mod sms_ready;
 mod ugnsinf;
 mod voltage_warning;
 
@@ -39,6 +40,7 @@ pub use psuttz::Psuttz;
 pub use rdy::Ready;
 pub use receive::ReceiveHeader;
 pub use remote_ip::IncomingConnection;
+pub use sms_ready::SmsReady;
 pub use ugnsinf::GnssReport;
 pub use voltage_warning::VoltageWarning;
 
@@ -60,6 +62,7 @@ pub enum Urc {
     PowerDown(PowerDown),
     Psuttz(Psuttz),
     Ready(Ready),
+    SmsReady(SmsReady),
     ReceiveHeader(ReceiveHeader),
     RegistrationStatus(RegistrationStatus),
     VoltageWarning(VoltageWarning),
@@ -91,6 +94,7 @@ impl ATParseLine for Urc {
             .or_else(parse(line, Urc::PowerDown))
             .or_else(parse(line, Urc::Psuttz))
             .or_else(parse(line, Urc::Ready))
+            .or_else(parse(line, Urc::SmsReady))
             .or_else(parse(line, Urc::ReceiveHeader))
             .or_else(parse(line, Urc::RegistrationStatus))
             .or_else(parse(line, Urc::VoltageWarning))
@@ -98,9 +102,8 @@ impl ATParseLine for Urc {
     }
 }
 
-//TODO: ----
-// `+CDNSGIP: 1,<domain name>,<ip>[,<ip2>]` dns
-// `+CDNSGIP: 0,<dns error code>` no dns me sad
+// TODO
+//mod cdnsgip
 //mod cmti;
 //mod cmt;
 //mod cbm;
