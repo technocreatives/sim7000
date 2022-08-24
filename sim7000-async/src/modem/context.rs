@@ -1,5 +1,3 @@
-use core::sync::atomic::{AtomicBool, Ordering};
-
 use embassy_util::{
     blocking_mutex::raw::CriticalSectionRawMutex, channel::mpmc::Channel, channel::signal::Signal,
     mutex::Mutex,
@@ -9,12 +7,14 @@ use heapless::Vec;
 use super::{CommandRunner, RawAtCommand};
 use crate::at_command::{
     response::ResponseCode,
-    unsolicited::{ConnectionMessage, GnssReport, RegistrationStatus},
+    unsolicited::{ConnectionMessage, GnssReport, RegistrationStatus, VoltageWarning},
 };
 use crate::drop::DropChannel;
+use crate::slot::Slot;
 use crate::tcp::CONNECTION_SLOTS;
 
-pub type TcpRxChannel = Channel<CriticalSectionRawMutex, Vec<u8, 365>, CONNECTION_SLOTS>;
+pub type TcpRxChannel = Channel<CriticalSectionRawMutex, Vec<u8, 365>, 8>;
+pub type TcpEventChannel = Channel<CriticalSectionRawMutex, ConnectionMessage, 8>;
 
 pub struct ModemContext {
     pub(crate) command_lock: Mutex<CriticalSectionRawMutex, ()>,
@@ -23,8 +23,8 @@ pub struct ModemContext {
     pub(crate) drop_channel: DropChannel,
     pub(crate) tcp: TcpContext,
     pub(crate) registration_events: Signal<RegistrationStatus>,
-    pub(crate) gnss_slot: AtomicBool,
-    pub(crate) gnss_reports: Signal<GnssReport>,
+    pub(crate) gnss_slot: Slot<Signal<GnssReport>>,
+    pub(crate) voltage_slot: Slot<Signal<VoltageWarning>>,
 }
 
 impl ModemContext {
@@ -36,8 +36,8 @@ impl ModemContext {
             drop_channel: DropChannel::new(),
             tcp: TcpContext::new(),
             registration_events: Signal::new(),
-            gnss_slot: AtomicBool::new(true),
-            gnss_reports: Signal::new(),
+            gnss_slot: Slot::new(Signal::new()),
+            voltage_slot: Slot::new(Signal::new()),
         }
     }
 
@@ -46,44 +46,36 @@ impl ModemContext {
     }
 }
 
+pub struct TcpSlot {
+    pub rx: TcpRxChannel,
+    pub events: TcpEventChannel,
+}
+
 pub struct TcpContext {
-    pub(crate) rx: [TcpRxChannel; CONNECTION_SLOTS],
-    pub(crate) events: [Channel<CriticalSectionRawMutex, ConnectionMessage, 4>; CONNECTION_SLOTS],
-    pub(crate) slots: [AtomicBool; CONNECTION_SLOTS],
+    pub(crate) slots: [Slot<TcpSlot>; CONNECTION_SLOTS],
+}
+
+impl TcpSlot {
+    pub const fn new() -> Self {
+        TcpSlot {
+            rx: Channel::new(),
+            events: Channel::new(),
+        }
+    }
 }
 
 impl TcpContext {
     pub const fn new() -> Self {
         TcpContext {
-            rx: [
-                Channel::new(),
-                Channel::new(),
-                Channel::new(),
-                Channel::new(),
-                Channel::new(),
-                Channel::new(),
-                Channel::new(),
-                Channel::new(),
-            ],
-            events: [
-                Channel::new(),
-                Channel::new(),
-                Channel::new(),
-                Channel::new(),
-                Channel::new(),
-                Channel::new(),
-                Channel::new(),
-                Channel::new(),
-            ],
             slots: [
-                AtomicBool::new(true),
-                AtomicBool::new(true),
-                AtomicBool::new(true),
-                AtomicBool::new(true),
-                AtomicBool::new(true),
-                AtomicBool::new(true),
-                AtomicBool::new(true),
-                AtomicBool::new(true),
+                Slot::new(TcpSlot::new()),
+                Slot::new(TcpSlot::new()),
+                Slot::new(TcpSlot::new()),
+                Slot::new(TcpSlot::new()),
+                Slot::new(TcpSlot::new()),
+                Slot::new(TcpSlot::new()),
+                Slot::new(TcpSlot::new()),
+                Slot::new(TcpSlot::new()),
             ],
         }
     }
@@ -91,26 +83,21 @@ impl TcpContext {
 
 impl TcpContext {
     pub fn claim(&self) -> Option<TcpToken> {
-        for i in 0..self.slots.len() {
-            if self.slots[i].fetch_and(false, Ordering::Relaxed) {
-                return Some(TcpToken {
-                    ordinal: i,
-                    rx: &self.rx[i],
-                    events: &self.events[i],
-                    slot: &self.slots[i],
-                });
-            }
-        }
-
-        None
+        self.slots.iter().enumerate().find_map(|(i, slot)| {
+            let TcpSlot { rx, events } = slot.claim()?; // find an unclaimed slot
+            Some(TcpToken {
+                ordinal: i,
+                rx,
+                events,
+            })
+        })
     }
 }
 
 pub struct TcpToken<'c> {
     ordinal: usize,
     rx: &'c TcpRxChannel,
-    events: &'c Channel<CriticalSectionRawMutex, ConnectionMessage, 4>,
-    slot: &'c AtomicBool,
+    events: &'c TcpEventChannel,
 }
 
 impl<'c> TcpToken<'c> {
@@ -122,11 +109,7 @@ impl<'c> TcpToken<'c> {
         self.rx
     }
 
-    pub fn events(&self) -> &'c Channel<CriticalSectionRawMutex, ConnectionMessage, 4> {
+    pub fn events(&self) -> &'c TcpEventChannel {
         self.events
-    }
-
-    pub fn close(&self) {
-        self.slot.fetch_or(true, Ordering::Relaxed);
     }
 }

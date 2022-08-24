@@ -71,6 +71,7 @@ impl<R: Read> ModemReader<R> {
                     continue;
                 }
 
+                let line = line.trim(); // The modem likes to be inconsistent with white space
                 let line = heapless::String::from(line);
 
                 // Remove the line from the buffer

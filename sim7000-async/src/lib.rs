@@ -10,8 +10,10 @@ pub mod modem;
 pub mod pump;
 pub mod read;
 pub mod single_arc;
+mod slot;
 pub mod tcp;
 mod util;
+pub mod voltage;
 pub mod write;
 
 use at_command::response::SimError;

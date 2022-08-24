@@ -7,7 +7,7 @@ use embassy_executor::executor::{SpawnError, Spawner};
 use embassy_util::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_util::channel::mpmc::Channel;
 use heapless::Vec;
-use sim7000_async::{gnss::Gnss, read::Read, tcp::TcpStream, write::Write};
+use sim7000_async::{gnss::Gnss, read::Read, tcp::TcpStream, voltage::VoltageWarner, write::Write};
 
 #[derive(Debug)]
 pub enum Error {
@@ -18,6 +18,14 @@ pub enum Error {
 }
 
 type TaskResponseChannel<T> = Channel<CriticalSectionRawMutex, Result<T, Error>, 1>;
+
+#[embassy_executor::task]
+pub async fn voltage_warn(warner: VoltageWarner<'static>) {
+    loop {
+        let warning = warner.warning().await;
+        log::warn!("Got voltage warning: {warning:?}");
+    }
+}
 
 #[embassy_executor::task]
 pub async fn gnss(gnss: Gnss<'static>) {

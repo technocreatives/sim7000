@@ -59,11 +59,15 @@ async fn main(spawner: Spawner, p: Peripherals) {
     log::info!("sleeping 1s");
     Timer::after(Duration::from_millis(1000)).await;
 
-    match modem.subscribe_to_gnss().await {
-        Ok(gnss) => spawner.must_spawn(example::gnss(gnss.unwrap())),
-        Err(e) => {
-            log::error!("Failed to subscribe to GNSS: {e:?}");
-        }
+    match modem.claim_voltage_warner().await {
+        Some(warner) => spawner.must_spawn(example::voltage_warn(warner)),
+        None => log::error!("Failed to take VoltageWarner handle"),
+    }
+
+    match modem.claim_gnss().await {
+        Ok(Some(gnss)) => spawner.must_spawn(example::gnss(gnss)),
+        Ok(None) => log::error!("Failed to take GNSS handle"),
+        Err(e) => log::error!("Failed to subscribe to GNSS: {e:?}"),
     }
 
     log::info!("sleeping 5s");

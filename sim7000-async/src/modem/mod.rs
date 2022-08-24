@@ -1,7 +1,6 @@
 mod command;
 mod context;
 
-use core::sync::atomic::Ordering;
 use embassy_executor::time::{with_timeout, Duration, Timer};
 use heapless::Vec;
 
@@ -15,6 +14,7 @@ use crate::{
     pump::{DropPump, RxPump, TxPump},
     read::{ModemReader, Read},
     tcp::TcpStream,
+    voltage::VoltageWarner,
     write::Write,
     Error, ModemPower,
 };
@@ -50,7 +50,8 @@ impl<'c, P: ModemPower> Modem<'c, P> {
             generic_response: context.generic_response.sender(),
             registration_events: &context.registration_events,
             tcp: &context.tcp,
-            gnss: &context.gnss_reports,
+            gnss: context.gnss_slot.peek(),
+            voltage_warning: context.voltage_slot.peek(),
         };
 
         let tx_pump = TxPump {
@@ -93,6 +94,7 @@ impl<'c, P: ModemPower> Modem<'c, P> {
         commands.run(cnmp::SetNetworkMode(NetworkMode::Lte)).await?;
         commands.run(cmnb::SetNbMode(NbMode::CatM)).await?;
         commands.run(cfgri::ConfigureRiPin(RiPinMode::On)).await?;
+        commands.run(cbatchk::EnableVBatCheck(true)).await?;
 
         let configure_edrx = cedrxs::ConfigureEDRX {
             n: EDRXSetting::Enable,
@@ -216,10 +218,11 @@ impl<'c, P: ModemPower> Modem<'c, P> {
         })
     }
 
-    pub async fn subscribe_to_gnss(&mut self) -> Result<Option<Gnss<'c>>, Error> {
-        if !self.context.gnss_slot.fetch_and(false, Ordering::Relaxed) {
-            return Ok(None);
-        }
+    pub async fn claim_gnss(&mut self) -> Result<Option<Gnss<'c>>, Error> {
+        let reports = match self.context.gnss_slot.claim() {
+            Some(reports) => reports,
+            None => return Ok(None),
+        };
 
         self.commands
             .lock()
@@ -237,7 +240,11 @@ impl<'c, P: ModemPower> Modem<'c, P> {
 
         Ok(Some(Gnss {
             _drop: AsyncDrop::new(&self.context.drop_channel, DropMessage::Gnss),
-            reports: &self.context.gnss_reports,
+            reports,
         }))
+    }
+
+    pub async fn claim_voltage_warner(&mut self) -> Option<VoltageWarner<'c>> {
+        VoltageWarner::take(&self.context.voltage_slot)
     }
 }

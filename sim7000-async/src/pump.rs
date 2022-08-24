@@ -10,7 +10,7 @@ use heapless::Vec;
 
 use crate::at_command::{
     response::ResponseCode,
-    unsolicited::{GnssReport, RegistrationStatus, Urc},
+    unsolicited::{GnssReport, PowerDown, RegistrationStatus, Urc, VoltageWarning},
     ATParseLine,
 };
 use crate::modem::{ModemContext, RawAtCommand, TcpContext};
@@ -33,6 +33,7 @@ pub struct RxPump<'context, R> {
     pub(crate) generic_response: Sender<'context, CriticalSectionRawMutex, ResponseCode, 1>,
     pub(crate) tcp: &'context TcpContext,
     pub(crate) gnss: &'context Signal<GnssReport>,
+    pub(crate) voltage_warning: &'context Signal<VoltageWarning>,
     pub(crate) registration_events: &'context Signal<RegistrationStatus>,
 }
 
@@ -72,16 +73,29 @@ impl<'context, R: Read> Pump for RxPump<'context, R> {
                                 "Sending {} bytes to tcp connection {connection}",
                                 buf.len()
                             );
-                            self.tcp.rx[connection].send(buf).await;
+                            self.tcp.slots[connection].peek().rx.send(buf).await;
                             log::info!("Bytes sent to tcp connection {connection}");
                         }
                         log::info!("Done sending to tcp connection {connection}");
                     }
                     Urc::ConnectionMessage(message) => {
-                        self.tcp.events[message.index].send(message.message).await;
+                        self.tcp.slots[message.index]
+                            .peek()
+                            .events
+                            .send(message.message)
+                            .await;
                     }
                     Urc::GnssReport(report) => {
                         self.gnss.signal(report);
+                    }
+                    Urc::VoltageWarning(warning) => {
+                        self.voltage_warning.signal(warning);
+                    }
+                    Urc::PowerDown(PowerDown::UnderVoltage) => {
+                        self.voltage_warning.signal(VoltageWarning::UnderVoltage);
+                    }
+                    Urc::PowerDown(PowerDown::OverVoltage) => {
+                        self.voltage_warning.signal(VoltageWarning::OverVoltage);
                     }
                     _ => log::warn!("Unhandled URC: {message:?}"),
                 }

@@ -1,5 +1,4 @@
 use core::mem::drop;
-use core::sync::atomic::Ordering;
 use embassy_util::{blocking_mutex::raw::CriticalSectionRawMutex, channel::mpmc::Channel};
 
 use crate::at_command::request::{CloseConnection, SetGnssPower};
@@ -69,14 +68,10 @@ impl DropMessage {
         log::debug!("Cleaning up after {self:?}");
         match self {
             &DropMessage::Connection(n) => {
-                if ctx.tcp.slots[n].fetch_or(true, Ordering::Relaxed) {
-                    log::error!("Tried to drop unused connection {n}");
-                }
+                ctx.tcp.slots[n].release();
             }
             DropMessage::Gnss => {
-                if ctx.gnss_slot.fetch_or(true, Ordering::Relaxed) {
-                    log::error!("Tried to drop unused GNSS");
-                }
+                ctx.gnss_slot.release();
             }
         }
     }
