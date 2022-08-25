@@ -17,7 +17,16 @@ version = "0.1.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e14bf7b4f565e5e717d7a7a65b2a05c0b8c96e4db636d6f780f03b15108cdd1b"
 dependencies = [
- "critical-section",
+ "critical-section 0.2.7",
+]
+
+[[package]]
+name = "atomic-polyfill"
+version = "1.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d299f547288d6db8d5c3a2916f7b2f66134b15b8c1ac1c4357dd3b8752af7bb2"
+dependencies = [
+ "critical-section 1.1.0",
 ]
 
 [[package]]
@@ -79,9 +88,9 @@ checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
 
 [[package]]
 name = "cortex-m"
-version = "0.7.5"
+version = "0.7.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cd20d4ac4aa86f4f75f239d59e542ef67de87cce2c282818dc6e84155d3ea126"
+checksum = "70858629a458fdfd39f9675c4dc309411f2a3f83bede76988d81bf1a0ecee9e0"
 dependencies = [
  "bare-metal 0.2.5",
  "bitfield",
@@ -120,6 +129,12 @@ dependencies = [
  "cortex-m",
  "riscv",
 ]
+
+[[package]]
+name = "critical-section"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d02ba51481d019be9c74a831d1133c364d78831b75c833478f3a21e1fd91e01a"
 
 [[package]]
 name = "crunchy"
@@ -165,24 +180,24 @@ dependencies = [
 [[package]]
 name = "embassy-cortex-m"
 version = "0.1.0"
-source = "git+https://github.com/embassy-rs/embassy?branch=master#b7b4c84067e0e85fa641a540458438297176f2e4"
+source = "git+https://github.com/embassy-rs/embassy?branch=master#1125d578428dd0af3274142edbac46ae90042a0e"
 dependencies = [
- "atomic-polyfill",
+ "atomic-polyfill 1.0.1",
  "cfg-if",
  "cortex-m",
- "critical-section",
+ "critical-section 1.1.0",
  "embassy-executor",
  "embassy-hal-common",
  "embassy-macros",
- "embassy-util",
+ "embassy-sync",
 ]
 
 [[package]]
 name = "embassy-embedded-hal"
 version = "0.1.0"
-source = "git+https://github.com/embassy-rs/embassy?branch=master#b7b4c84067e0e85fa641a540458438297176f2e4"
+source = "git+https://github.com/embassy-rs/embassy?branch=master#1125d578428dd0af3274142edbac46ae90042a0e"
 dependencies = [
- "embassy-util",
+ "embassy-sync",
  "embedded-hal 0.2.7",
  "embedded-hal 1.0.0-alpha.8",
  "embedded-hal-async",
@@ -194,30 +209,33 @@ dependencies = [
 [[package]]
 name = "embassy-executor"
 version = "0.1.0"
-source = "git+https://github.com/embassy-rs/embassy?branch=master#b7b4c84067e0e85fa641a540458438297176f2e4"
+source = "git+https://github.com/embassy-rs/embassy?branch=master#1125d578428dd0af3274142edbac46ae90042a0e"
 dependencies = [
- "atomic-polyfill",
+ "atomic-polyfill 1.0.1",
  "cfg-if",
- "critical-section",
+ "critical-section 1.1.0",
  "embassy-macros",
- "embedded-hal 0.2.7",
- "embedded-hal-async",
  "futures-util",
+ "static_cell",
 ]
+
+[[package]]
+name = "embassy-futures"
+version = "0.1.0"
+source = "git+https://github.com/embassy-rs/embassy?branch=master#1125d578428dd0af3274142edbac46ae90042a0e"
 
 [[package]]
 name = "embassy-hal-common"
 version = "0.1.0"
-source = "git+https://github.com/embassy-rs/embassy?branch=master#b7b4c84067e0e85fa641a540458438297176f2e4"
+source = "git+https://github.com/embassy-rs/embassy?branch=master#1125d578428dd0af3274142edbac46ae90042a0e"
 dependencies = [
- "embassy-util",
  "num-traits",
 ]
 
 [[package]]
 name = "embassy-macros"
 version = "0.1.0"
-source = "git+https://github.com/embassy-rs/embassy?branch=master#b7b4c84067e0e85fa641a540458438297176f2e4"
+source = "git+https://github.com/embassy-rs/embassy?branch=master#1125d578428dd0af3274142edbac46ae90042a0e"
 dependencies = [
  "darling",
  "proc-macro2",
@@ -228,19 +246,18 @@ dependencies = [
 [[package]]
 name = "embassy-nrf"
 version = "0.1.0"
-source = "git+https://github.com/embassy-rs/embassy?branch=master#b7b4c84067e0e85fa641a540458438297176f2e4"
+source = "git+https://github.com/embassy-rs/embassy?branch=master#1125d578428dd0af3274142edbac46ae90042a0e"
 dependencies = [
  "cfg-if",
  "cortex-m",
  "cortex-m-rt",
- "critical-section",
+ "critical-section 1.1.0",
  "embassy-cortex-m",
  "embassy-embedded-hal",
- "embassy-executor",
  "embassy-hal-common",
- "embassy-macros",
+ "embassy-sync",
+ "embassy-time",
  "embassy-usb",
- "embassy-util",
  "embedded-hal 0.2.7",
  "embedded-hal 1.0.0-alpha.8",
  "embedded-hal-async",
@@ -255,24 +272,38 @@ dependencies = [
 ]
 
 [[package]]
-name = "embassy-usb"
+name = "embassy-sync"
 version = "0.1.0"
-source = "git+https://github.com/embassy-rs/embassy?branch=master#b7b4c84067e0e85fa641a540458438297176f2e4"
+source = "git+https://github.com/embassy-rs/embassy?branch=master#1125d578428dd0af3274142edbac46ae90042a0e"
 dependencies = [
- "embassy-util",
+ "atomic-polyfill 1.0.1",
+ "cfg-if",
+ "critical-section 1.1.0",
+ "embedded-io",
+ "futures-util",
  "heapless",
 ]
 
 [[package]]
-name = "embassy-util"
+name = "embassy-time"
 version = "0.1.0"
-source = "git+https://github.com/embassy-rs/embassy?branch=master#b7b4c84067e0e85fa641a540458438297176f2e4"
+source = "git+https://github.com/embassy-rs/embassy?branch=master#1125d578428dd0af3274142edbac46ae90042a0e"
 dependencies = [
- "atomic-polyfill",
+ "atomic-polyfill 1.0.1",
  "cfg-if",
- "critical-section",
- "embedded-io",
+ "critical-section 1.1.0",
+ "embassy-macros",
+ "embedded-hal 0.2.7",
+ "embedded-hal-async",
  "futures-util",
+]
+
+[[package]]
+name = "embassy-usb"
+version = "0.1.0"
+source = "git+https://github.com/embassy-rs/embassy?branch=master#1125d578428dd0af3274142edbac46ae90042a0e"
+dependencies = [
+ "embassy-futures",
  "heapless",
 ]
 
@@ -428,7 +459,7 @@ version = "0.7.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9f6733da246dc2af610133c8be0667170fd68e8ca5630936b520300eee8846f9"
 dependencies = [
- "atomic-polyfill",
+ "atomic-polyfill 0.1.8",
  "hash32",
  "rustc_version 0.4.0",
  "spin",
@@ -495,7 +526,8 @@ dependencies = [
  "cortex-m-rt",
  "embassy-executor",
  "embassy-nrf",
- "embassy-util",
+ "embassy-sync",
+ "embassy-time",
  "futures",
  "heapless",
  "log",
@@ -667,9 +699,10 @@ checksum = "388a1df253eca08550bef6c72392cfe7c30914bf41df5269b68cbd6ff8f570a3"
 name = "sim7000-async"
 version = "0.1.0"
 dependencies = [
- "critical-section",
+ "critical-section 0.2.7",
  "embassy-executor",
- "embassy-util",
+ "embassy-sync",
+ "embassy-time",
  "embedded-hal 1.0.0-alpha.8",
  "embedded-hal-async",
  "futures-util",
@@ -691,6 +724,15 @@ name = "stable_deref_trait"
 version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a8f112729512f8e442d81f95a8a7ddf2b7c6b8a1a6f509a95864142b30cab2d3"
+
+[[package]]
+name = "static_cell"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e4c37c250d21f53fa7165e76e5401d7e6539c211a8d2cf449e3962956a5cc2ce"
+dependencies = [
+ "atomic-polyfill 1.0.1",
+]
 
 [[package]]
 name = "strsim"

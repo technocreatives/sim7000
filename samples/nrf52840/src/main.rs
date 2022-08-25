@@ -7,12 +7,12 @@ mod example;
 mod logger;
 
 use core::future::Future;
-use embassy_executor::executor::Spawner;
-use embassy_executor::time::{with_timeout, Duration, Timer};
+use embassy_executor::Spawner;
 use embassy_nrf::{
     gpio::{AnyPin, Input, Level, Output, OutputDrive, Pin, Pull},
-    interrupt, uarte, Peripherals,
+    interrupt, uarte,
 };
+use embassy_time::{with_timeout, Duration, Timer};
 use sim7000_async::{modem::ModemContext, spawn_modem, ModemPower, PowerState};
 
 //#[cfg(debug_assertions)]
@@ -21,7 +21,9 @@ extern crate panic_rtt_target;
 type Modem = sim7000_async::modem::Modem<'static, ModemPowerPins>;
 
 #[embassy_executor::main]
-async fn main(spawner: Spawner, p: Peripherals) {
+async fn main(spawner: Spawner) {
+    let p = embassy_nrf::init(Default::default());
+
     rtt_init_logger!(BlockIfFull);
     logger::set_level(LevelFilter::Debug);
     log::info!("Started");
@@ -105,7 +107,7 @@ async fn main(spawner: Spawner, p: Peripherals) {
 
     log::info!("main() finished");
     loop {
-        Timer::after(Duration::from_millis(300)).await;
+        Timer::after(Duration::from_millis(1000)).await;
     }
 }
 

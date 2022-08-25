@@ -3,9 +3,9 @@
 use crate::Modem;
 use core::future::Future;
 use core::str::{from_utf8, Utf8Error};
-use embassy_executor::executor::{SpawnError, Spawner};
-use embassy_util::blocking_mutex::raw::CriticalSectionRawMutex;
-use embassy_util::channel::mpmc::Channel;
+use embassy_executor::{SpawnError, Spawner};
+use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
+use embassy_sync::channel::Channel;
 use heapless::Vec;
 use sim7000_async::{gnss::Gnss, read::Read, tcp::TcpStream, voltage::VoltageWarner, write::Write};
 
