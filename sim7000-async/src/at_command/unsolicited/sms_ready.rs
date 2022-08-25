@@ -1,6 +1,5 @@
 use crate::at_command::{ATParseErr, ATParseLine};
 
-/// Sim7000 indicates that it has powered on with a fixed baud rate
 #[derive(Debug)]
 pub struct SmsReady;
 
