@@ -1,8 +1,8 @@
 use core::cmp::min;
 use core::future::Future;
-use embassy_util::{
+use embassy_sync::{
     blocking_mutex::raw::CriticalSectionRawMutex,
-    channel::mpmc::{Receiver, Sender},
+    channel::{Receiver, Sender},
     mutex::{Mutex, MutexGuard},
 };
 use heapless::{String, Vec};

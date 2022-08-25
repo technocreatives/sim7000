@@ -1,6 +1,5 @@
-use embassy_util::{
-    blocking_mutex::raw::CriticalSectionRawMutex, channel::mpmc::Channel, channel::signal::Signal,
-    mutex::Mutex,
+use embassy_sync::{
+    blocking_mutex::raw::CriticalSectionRawMutex, channel::Channel, mutex::Mutex, signal::Signal,
 };
 use heapless::Vec;
 

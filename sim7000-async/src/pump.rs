@@ -1,11 +1,11 @@
 use crate::write::Write;
 use core::future::Future;
-use embassy_executor::time::{with_timeout, Duration};
-use embassy_util::{
+use embassy_sync::{
     blocking_mutex::raw::CriticalSectionRawMutex,
-    channel::mpmc::{Receiver, Sender},
-    channel::signal::Signal,
+    channel::{Receiver, Sender},
+    signal::Signal,
 };
+use embassy_time::{with_timeout, Duration};
 use heapless::Vec;
 
 use crate::at_command::{

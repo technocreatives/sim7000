@@ -5,15 +5,16 @@ authors = ["Zoey Riordan <zoey@dos.cafe>"]
 description = "Drivers for the SIM7000 series of chips"
 license = "Apache-2.0 OR MIT"
 repository = "https://github.com/technocreatives/sim7000"
-
 edition = "2021"
 
 [dependencies]
 embedded-hal-async = { version = "0.1.0-alpha.0"}
 embedded-hal = { version = "1.0.0-alpha.8" }
-embassy-util = { version = "0.1.0", git = "https://github.com/embassy-rs/embassy", branch = "master", features = [ "nightly"]}
-embassy-executor = { version = "0.1.0", git = "https://github.com/embassy-rs/embassy", branch = "master", features = ["nightly", "time"] }
+embassy-sync = { version = "0.1.0", git = "https://github.com/embassy-rs/embassy", branch = "master", features = [ "nightly"]}
+embassy-executor = { version = "0.1.0", git = "https://github.com/embassy-rs/embassy", branch = "master", features = ["nightly"] }
+embassy-time = { version = "0.1.0", git = "https://github.com/embassy-rs/embassy", branch = "master", features = ["nightly"] }
 heapless = "0.7"
 futures-util = { version = "0.3", default-features = false }
 log = "0.4"
 critical-section = "0.2.7"
+

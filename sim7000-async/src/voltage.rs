@@ -1,4 +1,4 @@
-use embassy_util::channel::signal::Signal;
+use embassy_sync::signal::Signal;
 
 use crate::at_command::unsolicited::VoltageWarning;
 use crate::slot::Slot;

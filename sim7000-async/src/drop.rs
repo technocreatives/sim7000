@@ -1,5 +1,5 @@
 use core::mem::drop;
-use embassy_util::{blocking_mutex::raw::CriticalSectionRawMutex, channel::mpmc::Channel};
+use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, channel::Channel};
 
 use crate::at_command::request::{CloseConnection, SetGnssPower};
 use crate::gnss::GNSS_SLOTS;

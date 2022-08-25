@@ -1,7 +1,7 @@
 mod command;
 mod context;
 
-use embassy_executor::time::{with_timeout, Duration, Timer};
+use embassy_time::{with_timeout, Duration, Timer};
 use heapless::Vec;
 
 use crate::{
