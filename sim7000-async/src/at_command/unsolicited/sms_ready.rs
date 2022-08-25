@@ -7,6 +7,6 @@ impl ATParseLine for SmsReady {
     fn from_line(line: &str) -> Result<Self, ATParseErr> {
         line.eq("SMS Ready")
             .then(|| SmsReady)
-            .ok_or("Missing 'SMS Ready'".into())
+            .ok_or_else(|| "Missing 'SMS Ready'".into())
     }
 }

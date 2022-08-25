@@ -159,7 +159,7 @@ impl<'s> Write for TcpStream<'s> {
         self.send_tcp(words)
     }
 
-    fn flush<'a>(&'a mut self) -> Self::FlushFuture<'a> {
+    fn flush(&mut self) -> Self::FlushFuture<'_> {
         async { Ok(()) }
     }
 }

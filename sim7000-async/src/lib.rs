@@ -9,7 +9,6 @@ pub mod gnss;
 pub mod modem;
 pub mod pump;
 pub mod read;
-pub mod single_arc;
 mod slot;
 pub mod tcp;
 mod util;
@@ -55,12 +54,12 @@ pub trait ModemPower {
     type ResetFuture<'a>: Future<Output = ()> + 'a
     where
         Self: 'a;
-    fn enable<'a>(&'a mut self) -> Self::EnableFuture<'a>;
-    fn disable<'a>(&'a mut self) -> Self::DisableFuture<'a>;
-    fn sleep<'a>(&'a mut self) -> Self::SleepFuture<'a>;
-    fn wake<'a>(&'a mut self) -> Self::WakeFuture<'a>;
-    fn reset<'a>(&'a mut self) -> Self::ResetFuture<'a>;
-    fn state<'a>(&'a mut self) -> PowerState;
+    fn enable(&mut self) -> Self::EnableFuture<'_>;
+    fn disable(&mut self) -> Self::DisableFuture<'_>;
+    fn sleep(&mut self) -> Self::SleepFuture<'_>;
+    fn wake(&mut self) -> Self::WakeFuture<'_>;
+    fn reset(&mut self) -> Self::ResetFuture<'_>;
+    fn state(&mut self) -> PowerState;
 }
 
 /// This macro sets up a modem for use, statically allocating pump tasks and channels.

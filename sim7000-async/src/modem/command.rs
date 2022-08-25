@@ -108,7 +108,7 @@ impl<'a> CommandRunnerGuard<'a> {
         Response: ExpectResponse,
     {
         self.send_request(command).await;
-        Response::expect(&self).await
+        Response::expect(self).await
     }
 }
 

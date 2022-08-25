@@ -25,7 +25,7 @@ pub trait Pump {
     where
         Self: 'a;
 
-    fn pump<'a>(&'a mut self) -> Self::Fut<'a>;
+    fn pump(&mut self) -> Self::Fut<'_>;
 }
 
 pub struct RxPump<'context, R> {

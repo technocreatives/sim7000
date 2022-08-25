@@ -38,7 +38,7 @@ impl ATParseLine for GenericOk {
         // TODO: SHUT OK should be seperate type
         (line == "OK" || line == "SHUT OK")
             .then(|| GenericOk)
-            .ok_or("Not 'OK'".into())
+            .ok_or_else(|| "Not 'OK'".into())
     }
 }
 
@@ -71,7 +71,9 @@ impl ATParseLine for SimError {
 
 impl ATParseLine for WritePrompt {
     fn from_line(line: &str) -> Result<Self, ATParseErr> {
-        line.eq("> ").then(|| WritePrompt).ok_or("Not '> '".into())
+        line.eq("> ")
+            .then(|| WritePrompt)
+            .ok_or_else(|| "Not '> '".into())
     }
 }
 

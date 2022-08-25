@@ -6,6 +6,8 @@ pub struct Ready;
 
 impl ATParseLine for Ready {
     fn from_line(line: &str) -> Result<Self, ATParseErr> {
-        line.eq("RDY").then(|| Ready).ok_or("Missing 'RDY'".into())
+        line.eq("RDY")
+            .then(|| Ready)
+            .ok_or_else(|| "Missing 'RDY'".into())
     }
 }

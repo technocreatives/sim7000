@@ -75,13 +75,12 @@ impl<'c, P: ModemPower> Modem<'c, P> {
         };
 
         for _ in 0..5 {
-            match with_timeout(Duration::from_millis(2000), async {
+            if let Ok(Ok(_)) = with_timeout(Duration::from_millis(2000), async {
                 commands.run(set_flow_control).await
             })
             .await
             {
-                Ok(Ok(_)) => break,
-                _ => {}
+                break;
             }
         }
         commands.run(csclk::SetSlowClock(false)).await?;
@@ -105,7 +104,7 @@ impl<'c, P: ModemPower> Modem<'c, P> {
         for _ in 0..5 {
             match commands.run(configure_edrx).await {
                 Ok(_) => break,
-                _ => Timer::after(Duration::from_millis(200 as u64)).await,
+                _ => Timer::after(Duration::from_millis(200)).await,
             }
         }
         commands.run(configure_edrx).await?;
@@ -124,13 +123,12 @@ impl<'c, P: ModemPower> Modem<'c, P> {
         let commands = self.commands.lock().await;
 
         for _ in 0..5 {
-            match with_timeout(Duration::from_millis(2000), async {
+            if let Ok(Ok(_)) = with_timeout(Duration::from_millis(2000), async {
                 commands.run(set_flow_control).await
             })
             .await
             {
-                Ok(Ok(_)) => break,
-                _ => {}
+                break;
             }
         }
         commands.run(ate::SetEcho(false)).await?;
@@ -149,19 +147,18 @@ impl<'c, P: ModemPower> Modem<'c, P> {
 
     async fn wait_for_registration(&self, commands: &CommandRunnerGuard<'_>) -> Result<(), Error> {
         loop {
-            match with_timeout(Duration::from_millis(2000), async {
+            if with_timeout(Duration::from_millis(2000), async {
                 commands.run(cgreg::GetRegistrationStatus).await
             })
             .await
+            .is_err()
             {
-                Err(_) => continue,
-                _ => {}
+                continue;
             }
+
             match self.context.registration_events.wait().await {
-                RegistrationStatus::RegisteredHome | RegistrationStatus::RegisteredRoaming => {
-                    break;
-                }
-                _ => Timer::after(Duration::from_millis(200 as u64)).await,
+                RegistrationStatus::RegisteredHome | RegistrationStatus::RegisteredRoaming => break,
+                _ => Timer::after(Duration::from_millis(200)).await,
             }
         }
 
