@@ -69,11 +69,14 @@ impl<'c, P: ModemPower> Modem<'c, P> {
         self.power.enable().await;
 
         let commands = self.commands.lock().await;
+
         let set_flow_control = SetFlowControl {
             dce_by_dte: FlowControl::Hardware,
             dte_by_dce: FlowControl::Hardware,
         };
 
+        // Turn on hardware flow control, the modem does not save this state on reboot.
+        // We need to set it as fast as possible to avoid dropping bytes.
         for _ in 0..5 {
             if let Ok(Ok(_)) = with_timeout(Duration::from_millis(2000), async {
                 commands.run(set_flow_control).await
@@ -83,6 +86,20 @@ impl<'c, P: ModemPower> Modem<'c, P> {
                 break;
             }
         }
+
+        // Modem has been known to get stuck in an unresponsive state until we jiggle it by
+        // enabling echo. This is fine.
+        for _ in 0..5 {
+            if let Ok(Ok(_)) = with_timeout(
+                Duration::from_millis(1000),
+                commands.run(ate::SetEcho(true)),
+            )
+            .await
+            {
+                break;
+            }
+        }
+
         commands.run(csclk::SetSlowClock(false)).await?;
         commands.run(At).await?;
         commands.run(ipr::SetBaudRate(BaudRate::Hz115200)).await?;
