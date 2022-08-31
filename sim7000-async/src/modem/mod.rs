@@ -162,6 +162,11 @@ impl<'c, P: ModemPower> Modem<'c, P> {
         Ok(())
     }
 
+    pub async fn deactivate(&mut self) {
+        // TODO: we probably need to do more work here, this is a temporary implementation
+        self.power.disable().await;
+    }
+
     async fn wait_for_registration(&self, commands: &CommandRunnerGuard<'_>) -> Result<(), Error> {
         loop {
             if with_timeout(Duration::from_millis(2000), async {
