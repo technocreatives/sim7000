@@ -1,12 +1,14 @@
 use crate::at_command::{ATParseErr, ATParseLine};
 
 #[derive(Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct Connection {
     pub index: usize,
     pub message: ConnectionMessage,
 }
 
 #[derive(Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum ConnectionMessage {
     /// The connection was successfully established
     Connected,

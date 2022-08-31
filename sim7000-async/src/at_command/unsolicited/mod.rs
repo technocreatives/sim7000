@@ -46,6 +46,7 @@ pub use voltage_warning::VoltageWarning;
 
 /// Unsolicited Response Code
 #[derive(Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum Urc {
     AppNetworkActive(AppNetworkActive),
     CFun(CFun),

@@ -13,6 +13,7 @@ use crate::at_command::{
     unsolicited::{GnssReport, PowerDown, RegistrationStatus, Urc, VoltageWarning},
     ATParseLine,
 };
+use crate::log;
 use crate::modem::{ModemContext, RawAtCommand, TcpContext};
 use crate::read::{ModemReader, Read};
 use crate::Error;
@@ -54,7 +55,7 @@ impl<'context, R: Read> Pump for RxPump<'context, R> {
             if let Ok(message) = Urc::from_line(&line) {
                 // First, check if it's an unsolicited message
 
-                log::info!("Got URC: {line:?}");
+                log::info!("Got URC: {:?}", line.as_str());
                 match message {
                     Urc::RegistrationStatus(status) => {
                         self.registration_events.signal(status);
@@ -62,7 +63,7 @@ impl<'context, R: Read> Pump for RxPump<'context, R> {
                     Urc::ReceiveHeader(header) => {
                         let mut length = header.length;
                         let connection = header.connection;
-                        log::info!("Reading {length} bytes from modem");
+                        log::info!("Reading {} bytes from modem", length);
                         while length > 0 {
                             log::debug!("remaining read: {}", length);
                             let mut buf = Vec::new();
@@ -70,13 +71,14 @@ impl<'context, R: Read> Pump for RxPump<'context, R> {
                             self.reader.read_exact(&mut buf).await?;
                             length -= buf.len();
                             log::info!(
-                                "Sending {} bytes to tcp connection {connection}",
-                                buf.len()
+                                "Sending {} bytes to tcp connection {}",
+                                buf.len(),
+                                connection
                             );
                             self.tcp.slots[connection].peek().rx.send(buf).await;
-                            log::info!("Bytes sent to tcp connection {connection}");
+                            log::info!("Bytes sent to tcp connection {}", connection);
                         }
-                        log::info!("Done sending to tcp connection {connection}");
+                        log::info!("Done sending to tcp connection {}", connection);
                     }
                     Urc::ConnectionMessage(message) => {
                         self.tcp.slots[message.index]
@@ -97,12 +99,12 @@ impl<'context, R: Read> Pump for RxPump<'context, R> {
                     Urc::PowerDown(PowerDown::OverVoltage) => {
                         self.voltage_warning.signal(VoltageWarning::OverVoltage);
                     }
-                    _ => log::warn!("Unhandled URC: {message:?}"),
+                    _ => log::warn!("Unhandled URC: {:?}", message),
                 }
             } else if let Ok(response) = ResponseCode::from_line(&line) {
                 // If it's not a URC, try to parse it as a regular response code
 
-                log::info!("Got generic response: {line:?}");
+                log::info!("Got generic response: {:?}", line.as_str());
                 if with_timeout(
                     Duration::from_secs(10),
                     self.generic_response.send(response),
@@ -115,7 +117,7 @@ impl<'context, R: Read> Pump for RxPump<'context, R> {
             } else {
                 // The modem likely sent us gibberish we could not understand.
                 // TODO: We might want to trigger a reboot when the modem starts acting like this.
-                log::error!("Got unknown response: {line:?}");
+                log::error!("Got unknown response: {:?}", line.as_str());
             }
 
             Ok(())
@@ -138,7 +140,7 @@ impl<'context, W: Write> Pump for TxPump<'context, W> {
         async {
             let command = self.commands.recv().await;
             match &command {
-                RawAtCommand::Text(text) => log::info!("Write to modem: {text:?}"),
+                RawAtCommand::Text(text) => log::info!("Write to modem: {:?}", text.as_str()),
                 RawAtCommand::Binary(bytes) => log::info!("Write {} bytes to modem", bytes.len()),
             }
             self.writer.write_all(command.as_bytes()).await?;
@@ -197,7 +199,10 @@ macro_rules! pump_task {
             use ::sim7000_async::pump::Pump;
             loop {
                 if let Err(err) = pump.pump().await {
+                    #[cfg(feature = "log")]
                     log::error!("Error pumping {} {:?}", stringify!($name), err);
+                    #[cfg(feature = "defmt")]
+                    defmt::error!("Error pumping {} {:?}", stringify!($name), err);
                 }
             }
         }

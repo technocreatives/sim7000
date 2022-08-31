@@ -2,7 +2,7 @@ use core::future::Future;
 use core::str::from_utf8;
 use heapless::{String, Vec};
 
-use crate::{Error, SerialError};
+use crate::{log, Error, SerialError};
 
 pub trait Read: SerialError {
     /// Future returned by the `read` method.
@@ -38,7 +38,10 @@ impl<R: Read> ModemReader<R> {
         const CRLF: &str = "\r\n";
         loop {
             if !self.buffer.is_empty() {
-                log::debug!("CURRENT BUFFER {:?}", from_utf8(&self.buffer));
+                log::debug!(
+                    "CURRENT BUFFER {:?}",
+                    from_utf8(&self.buffer).map_err(|_| "Not UTF-8"),
+                );
             }
 
             if self.buffer.starts_with(MODEM_INPUT_PROMPT.as_bytes()) {

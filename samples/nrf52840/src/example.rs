@@ -23,7 +23,7 @@ type TaskResponseChannel<T> = Channel<CriticalSectionRawMutex, Result<T, Error>,
 pub async fn voltage_warn(warner: VoltageWarner<'static>) {
     loop {
         let warning = warner.warning().await;
-        log::warn!("Got voltage warning: {warning:?}");
+        defmt::warn!("Got voltage warning: {:?}", warning);
     }
 }
 
@@ -31,7 +31,7 @@ pub async fn voltage_warn(warner: VoltageWarner<'static>) {
 pub async fn gnss(gnss: Gnss<'static>) {
     loop {
         let report = gnss.report().await;
-        log::info!("GNSS report: {report:?}");
+        defmt::info!("GNSS report: {:?}", report);
     }
 }
 
@@ -46,18 +46,18 @@ pub async fn ping_tcpbin(
         TASK_CHANNEL
             .send(
                 async move {
-                    log::info!("Sending Marco");
+                    defmt::info!("Sending Marco");
                     const MARCO: &str = "\nFOOBARBAZBOPSHOP\n";
                     stream.write_all(MARCO.as_bytes()).await?;
 
-                    log::info!("Reading Polo");
+                    defmt::info!("Reading Polo");
                     let mut buf = [0u8; MARCO.len()];
 
                     stream.read_exact(&mut buf).await?;
 
                     let polo = from_utf8(&buf)?;
 
-                    log::info!(r#"Got response {polo:?}"#,);
+                    defmt::info!(r#"Got response {:?}"#, polo);
 
                     Ok(())
                 }
@@ -66,7 +66,7 @@ pub async fn ping_tcpbin(
             .await
     }
 
-    log::info!("Connecting to tcpbin.com");
+    defmt::info!("Connecting to tcpbin.com");
     let stream = modem.connect_tcp("tcpbin.com", 4242).await?;
 
     spawner.spawn(task(stream))?;
@@ -87,23 +87,23 @@ pub async fn get_quote_of_the_day(
                     let mut buf = Vec::<u8, 1024>::new();
 
                     loop {
-                        log::info!("QotD call read");
+                        defmt::info!("QotD call read");
                         let mut tmp = [0u8; 128];
                         let n = stream.read(&mut tmp).await?;
-                        log::info!("QotD read {n} bytes");
+                        defmt::info!("QotD read {} bytes", n);
                         if n == 0 {
                             break;
                         }
 
                         if buf.extend_from_slice(&tmp[..n]).is_err() {
-                            log::warn!("QotD buffer full");
+                            defmt::warn!("QotD buffer full");
                             break;
                         }
                     }
 
                     let quote = from_utf8(&buf)?;
 
-                    log::info!("Quote of the Day:\r\n{quote}");
+                    defmt::info!("Quote of the Day:\r\n{}", quote);
 
                     Ok(())
                 }
@@ -112,7 +112,7 @@ pub async fn get_quote_of_the_day(
             .await
     }
 
-    log::info!("Getting Quote of the Day");
+    defmt::info!("Getting Quote of the Day");
     let stream = modem.connect_tcp("djxmmx.net", 17).await?;
 
     spawner.spawn(task(stream))?;
@@ -140,5 +140,19 @@ impl From<sim7000_async::tcp::TcpError> for Error {
 impl From<Utf8Error> for Error {
     fn from(e: Utf8Error) -> Self {
         Error::Utf8(e)
+    }
+}
+
+impl defmt::Format for Error {
+    fn format(&self, f: defmt::Formatter) {
+        use defmt::write;
+
+        // Format as hexadecimal.
+        match self {
+            Error::Spawn(_) => write!(f, "SpawnError"),
+            Error::Sim(e) => write!(f, "Sim({:?})", e),
+            Error::Tcp(e) => write!(f, "Tcp({:?})", e),
+            Error::Utf8(_) => write!(f, "Utf8Error"),
+        }
     }
 }

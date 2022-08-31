@@ -1,6 +1,8 @@
 use core::any::type_name;
 use core::sync::atomic::{AtomicBool, Ordering};
 
+use crate::log;
+
 pub(crate) struct Slot<T: 'static> {
     is_free: AtomicBool,
     inner: T,

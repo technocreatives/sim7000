@@ -24,7 +24,7 @@ connect_under_reset = false
 [env.rtt]
 enabled = true
 # Channel associations to be displayed. All shown when not selected. { String, Defmt, BinaryLE }
-channels = []
+channels = [{ up = 0, name = "defmt_r", format = "Defmt" }]
 # { up = 0, name = "defmt_name", format = "Defmt" }
 timeout = 3000
 show_timestamps = true

@@ -15,6 +15,15 @@ mod util;
 pub mod voltage;
 pub mod write;
 
+#[cfg(all(feature = "log", feature = "defmt"))]
+compile_error!("'log' and 'defmt' features are mutually exclusive");
+#[cfg(not(any(feature = "log", feature = "defmt")))]
+compile_error!("please enable a logging feature, e.g. 'log' or 'defmt'");
+#[cfg(feature = "defmt")]
+pub(crate) use defmt as log;
+#[cfg(feature = "log")]
+pub(crate) use log;
+
 use at_command::response::SimError;
 use core::future::Future;
 
@@ -23,6 +32,7 @@ pub trait SerialError {
 }
 
 #[derive(Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum Error {
     InvalidUtf8,
     BufferOverflow,

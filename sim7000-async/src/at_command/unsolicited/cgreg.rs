@@ -2,6 +2,7 @@ use crate::at_command::{ATParseErr, ATParseLine};
 
 /// Network registration status
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum RegistrationStatus {
     NotRegistered,
     RegisteredHome,

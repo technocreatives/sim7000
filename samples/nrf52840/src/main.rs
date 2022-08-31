@@ -4,7 +4,6 @@
 #![feature(generic_associated_types)]
 
 mod example;
-mod logger;
 
 use core::future::Future;
 use embassy_executor::Spawner;
@@ -15,6 +14,8 @@ use embassy_nrf::{
 use embassy_time::{with_timeout, Duration, Timer};
 use sim7000_async::{modem::ModemContext, spawn_modem, ModemPower, PowerState};
 
+use defmt_rtt as _; // linker shenanigans
+
 //#[cfg(debug_assertions)]
 extern crate panic_rtt_target;
 
@@ -24,9 +25,13 @@ type Modem = sim7000_async::modem::Modem<'static, ModemPowerPins>;
 async fn main(spawner: Spawner) {
     let p = embassy_nrf::init(Default::default());
 
-    rtt_init_logger!(BlockIfFull);
-    logger::set_level(LevelFilter::Debug);
-    log::info!("Started");
+    defmt::error!("log-level: error");
+    defmt::warn!("log-level: warn");
+    defmt::info!("log-level: info");
+    defmt::debug!("log-level: debug");
+    defmt::trace!("log-level: trace");
+
+    defmt::info!("Started");
 
     let irq = interrupt::take!(UARTE0_UART0);
     let mut config = uarte::Config::default();
@@ -52,60 +57,60 @@ async fn main(spawner: Spawner) {
         power_pins
     );
 
-    log::info!("Initializing modem");
+    defmt::info!("Initializing modem");
     modem.init().await.unwrap();
 
-    log::info!("Activating modem");
+    defmt::info!("Activating modem");
     modem.activate().await.unwrap();
 
-    log::info!("sleeping 1s");
+    defmt::info!("sleeping 1s");
     Timer::after(Duration::from_millis(1000)).await;
 
     match modem.claim_voltage_warner().await {
         Some(warner) => spawner.must_spawn(example::voltage_warn(warner)),
-        None => log::error!("Failed to take VoltageWarner handle"),
+        None => defmt::error!("Failed to take VoltageWarner handle"),
     }
 
     match modem.claim_gnss().await {
         Ok(Some(gnss)) => spawner.must_spawn(example::gnss(gnss)),
-        Ok(None) => log::error!("Failed to take GNSS handle"),
-        Err(e) => log::error!("Failed to subscribe to GNSS: {e:?}"),
+        Ok(None) => defmt::error!("Failed to take GNSS handle"),
+        Err(e) => defmt::error!("Failed to subscribe to GNSS: {:?}", e),
     }
 
-    log::info!("sleeping 5s");
+    defmt::info!("sleeping 5s");
     Timer::after(Duration::from_millis(5000)).await;
 
     for _ in 0..100 {
-        log::info!("sleeping 1s");
+        defmt::info!("sleeping 1s");
         Timer::after(Duration::from_millis(1000)).await;
 
-        log::info!("spawning tasks");
+        defmt::info!("spawning tasks");
         let tcpbin_handle = example::ping_tcpbin(&spawner, &mut modem)
             .await
-            .map_err(|e| log::error!("Failed to spawn ping_tcpbin: {e:?}"))
+            .map_err(|e| defmt::error!("Failed to spawn ping_tcpbin: {:?}", e))
             .ok();
 
         let qotd_handle = example::get_quote_of_the_day(&spawner, &mut modem)
             .await
-            .map_err(|e| log::error!("Failed to spawn Quote of the Day: {e:?}"))
+            .map_err(|e| defmt::error!("Failed to spawn Quote of the Day: {:?}", e))
             .ok();
 
-        log::info!("await tcpbin");
+        defmt::info!("await tcpbin");
         if let Some(handle) = tcpbin_handle {
             if let Err(e) = handle.await {
-                log::error!("ping_tcpbin failed: {e:?}");
+                defmt::error!("ping_tcpbin failed: {:?}", e);
             }
         }
 
-        log::info!("await QotD");
+        defmt::info!("await QotD");
         if let Some(handle) = qotd_handle {
             if let Err(e) = handle.await {
-                log::error!("get QotD failed: {e:?}");
+                defmt::error!("get QotD failed: {:?}", e);
             }
         }
     }
 
-    log::info!("main() finished");
+    defmt::info!("main() finished");
     loop {
         Timer::after(Duration::from_millis(1000)).await;
     }
@@ -139,7 +144,7 @@ impl<'d> sim7000_async::read::Read for AppUarteRead<'d> {
 
     fn read<'a>(&'a mut self, read: &'a mut [u8]) -> Self::ReadFuture<'a> {
         async move {
-            log::trace!("Read until idle");
+            defmt::trace!("Read until idle");
             let n = match with_timeout(Duration::from_millis(1000), self.0.read_until_idle(read))
                 .await
             {
@@ -149,7 +154,7 @@ impl<'d> sim7000_async::read::Read for AppUarteRead<'d> {
             };
 
             if n > 0 {
-                log::debug!("Read {n} bytes from modem uarte");
+                defmt::debug!("Read {} bytes from modem uarte", n);
             }
 
             Ok(n)
@@ -198,12 +203,12 @@ impl ModemPowerPins {
         self.power_key.set_high();
         Timer::after(Duration::from_millis(millis as u64)).await;
         self.power_key.set_low();
-        log::info!("power key pressed for {}ms", millis);
+        defmt::info!("power key pressed for {}ms", millis);
     }
 
     fn is_enabled(&self) -> bool {
         let status = self.status.is_high();
-        log::info!(
+        defmt::info!(
             "modem is currently {}",
             if status { "enabled" } else { "disabled" }
         );
@@ -230,33 +235,33 @@ impl ModemPower for ModemPowerPins {
 
     fn enable(&mut self) -> Self::EnableFuture<'_> {
         async {
-            log::info!("enabling modem");
+            defmt::info!("enabling modem");
             //poor datasheet gives only min, not max timeout
             if self.is_enabled() {
-                log::info!("modem was enabled already");
+                defmt::info!("modem was enabled already");
                 return;
             }
             self.press_power_key(1100).await;
             while self.status.is_low() {
                 Timer::after(Duration::from_millis(100)).await;
             }
-            log::info!("modem enabled");
+            defmt::info!("modem enabled");
         }
     }
 
     fn disable(&mut self) -> Self::DisableFuture<'_> {
         async {
-            log::info!("disabling modem");
+            defmt::info!("disabling modem");
             //poor datasheet gives only min, not max timeout
             if !self.is_enabled() {
-                log::info!("modem was disabled already");
+                defmt::info!("modem was disabled already");
                 return;
             }
             self.press_power_key(1300).await;
             while self.status.is_high() {
                 Timer::after(Duration::from_millis(100)).await;
             }
-            log::info!("modem disabled");
+            defmt::info!("modem disabled");
         }
     }
 

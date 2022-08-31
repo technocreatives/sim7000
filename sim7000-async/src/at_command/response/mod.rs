@@ -2,9 +2,11 @@ use super::{ATParseErr, ATParseLine};
 use crate::util::collect_array;
 
 #[derive(Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct GenericOk;
 
 #[derive(Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum SimError {
     /// Generic error
     Generic,
@@ -17,14 +19,17 @@ pub enum SimError {
 }
 
 #[derive(Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct WritePrompt;
 
 #[derive(Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct CloseOk {
     pub connection: usize,
 }
 
 #[derive(Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct IpExt {
     pub addr: [u8; 4],
 }
@@ -129,6 +134,7 @@ impl ATResponse for IpExt {
 
 /// Sim7000 AT-command response code
 #[derive(Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum ResponseCode {
     Ok(GenericOk),
     Error(SimError),

@@ -11,6 +11,7 @@ use crate::at_command::{
     request::ATRequest,
     response::{ATResponse, ResponseCode},
 };
+use crate::log;
 use crate::modem::ModemContext;
 use crate::Error;
 
@@ -86,7 +87,7 @@ impl<'a> CommandRunnerGuard<'a> {
                 Err(unknown_response) => {
                     // TODO: we might want to make this a hard error, if/when we feel confident in
                     // how both the driver and the modem behaves
-                    log::warn!("Got unexpected ATResponse: {unknown_response:?}")
+                    log::warn!("Got unexpected ATResponse: {:?}", unknown_response)
                 }
             }
         }

@@ -6,6 +6,7 @@ use crate::{
     at_command::request::cipsend,
     at_command::unsolicited::ConnectionMessage,
     drop::AsyncDrop,
+    log,
     modem::{CommandRunner, TcpToken},
     read::Read,
     write::Write,
@@ -16,6 +17,7 @@ use crate::{
 pub const CONNECTION_SLOTS: usize = 8;
 
 #[derive(Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum TcpError {
     Timeout,
     SendFail,
@@ -87,7 +89,7 @@ impl<'s> TcpStream<'s> {
                         log::info!("{} rx got {} bytes", self.token.ordinal(), buffer.len());
                     }
                     Either::Right((event, _)) => {
-                        log::info!("{} event got {event:?}", self.token.ordinal());
+                        log::info!("{} event got {:?}", self.token.ordinal(), event);
                     }
                 }
 

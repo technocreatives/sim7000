@@ -1,6 +1,7 @@
 use crate::at_command::{ATParseErr, ATParseLine};
 
 #[derive(Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct GprsDisconnected;
 
 impl ATParseLine for GprsDisconnected {

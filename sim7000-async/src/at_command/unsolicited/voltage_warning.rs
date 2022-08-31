@@ -2,6 +2,7 @@ use crate::at_command::{ATParseErr, ATParseLine};
 
 /// Voltage is out of range for the Sim7000
 #[derive(Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum VoltageWarning {
     OverVoltage,
     UnderVoltage,

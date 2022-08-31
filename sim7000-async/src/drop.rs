@@ -3,6 +3,7 @@ use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, channel::Channe
 
 use crate::at_command::request::{CloseConnection, SetGnssPower};
 use crate::gnss::GNSS_SLOTS;
+use crate::log;
 use crate::modem::{CommandRunnerGuard, ModemContext};
 use crate::tcp::CONNECTION_SLOTS;
 use crate::Error;
@@ -33,6 +34,7 @@ impl Drop for AsyncDrop<'_> {
 
 /// This type facilitates asynchronous dropping.
 #[derive(Clone, Copy, Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum DropMessage {
     Connection(usize),
     Gnss,
@@ -40,7 +42,7 @@ pub enum DropMessage {
 
 impl DropMessage {
     pub async fn run(&self, runner: &mut CommandRunnerGuard<'_>) -> Result<(), Error> {
-        log::debug!("Sending drop command for {self:?}");
+        log::debug!("Sending drop command for {:?}", self);
 
         /// It is Ok for the result to be a SimError
         fn sim_may_fail(error: Error) -> Result<(), Error> {
@@ -65,7 +67,7 @@ impl DropMessage {
     }
 
     pub fn clean_up(&self, ctx: &ModemContext) {
-        log::debug!("Cleaning up after {self:?}");
+        log::debug!("Cleaning up after {:?}", self);
         match self {
             &DropMessage::Connection(n) => {
                 ctx.tcp.slots[n].release();

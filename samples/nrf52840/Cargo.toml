@@ -3,19 +3,23 @@ name = "nrf52840"
 version = "0.1.0"
 edition = "2021"
 
+[profile.dev]
+opt-level = "s" # flashing large binaries takes ages
+
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-embassy-executor = { version = "0.1.0", git = "https://github.com/embassy-rs/embassy", branch = "master", features = ["nightly", "integrated-timers"] }
-embassy-time = { version = "0.1.0", git = "https://github.com/embassy-rs/embassy", branch = "master", features = [] }
-embassy-nrf = { version = "0.1.0", git = "https://github.com/embassy-rs/embassy", branch = "master", features = ["nightly", "nrf52840", "time-driver-rtc1", "log"] }
-embassy-sync = { version = "0.1.0", git = "https://github.com/embassy-rs/embassy", branch = "master", features = [ "nightly"]}
-panic-rtt-target = { version = "0.1.1", features = ["cortex-m"] }
-rtt-target = { version = "0.3.0", features = ["cortex-m"] }
 cortex-m = { version = "0.7.6", features = ["critical-section-single-core"] }
 cortex-m-rt = "0.7.0"
+defmt = "0.3.2"
+defmt-rtt = "0.3.2"
+embassy-executor = { version = "0.1.0", git = "https://github.com/embassy-rs/embassy", branch = "master", features = ["nightly", "integrated-timers"] }
+embassy-nrf = { version = "0.1.0", git = "https://github.com/embassy-rs/embassy", branch = "master", features = ["nightly", "nrf52840", "time-driver-rtc1", "log"] }
+embassy-sync = { version = "0.1.0", git = "https://github.com/embassy-rs/embassy", branch = "master", features = [ "nightly"]}
+embassy-time = { version = "0.1.0", git = "https://github.com/embassy-rs/embassy", branch = "master", features = ["defmt", "defmt-timestamp-uptime"] }
 futures = { version = "0.3.17", default-features = false }
-sim7000-async = { path = "../../sim7000-async" }
-log = "0.4"
 heapless = "0.7.15"
+panic-rtt-target = { version = "0.1.1", features = ["cortex-m"] }
+rtt-target = { version = "0.3.0", features = ["cortex-m"] }
+sim7000-async = { path = "../../sim7000-async", default-features = false, features = ["defmt"] }
 

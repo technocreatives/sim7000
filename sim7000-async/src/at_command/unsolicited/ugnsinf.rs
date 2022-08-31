@@ -4,6 +4,7 @@ use crate::at_command::{ATParseErr, ATParseLine};
 use crate::util::collect_array;
 
 #[derive(Debug, PartialEq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum GnssReport {
     NotEnabled,
     NoFix {

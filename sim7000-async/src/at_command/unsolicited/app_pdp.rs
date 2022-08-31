@@ -2,6 +2,7 @@ use crate::at_command::{ATParseErr, ATParseLine};
 
 /// Indicates whether the app network is active
 #[derive(Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct AppNetworkActive(pub bool);
 
 impl ATParseLine for AppNetworkActive {

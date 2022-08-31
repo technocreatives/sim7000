@@ -3,6 +3,7 @@ use crate::at_command::{ATParseErr, ATParseLine};
 // stub type
 /// Network time zone
 #[derive(Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum PowerDown {
     /// Normal power down, triggered by a command or by the power pin.
     Normal,
