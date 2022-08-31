@@ -79,7 +79,8 @@ pub trait ModemPower {
 macro_rules! spawn_modem {
     // TODO: the "as" keyword hack is a bit weird.
     ($spawner:expr, $read_ty:ty as $read:expr, $write_ty:ty as $write:expr, $power_pins:expr) => {{
-        static CONTEXT: ModemContext = ::sim7000_async::modem::ModemContext::new();
+        static CONTEXT: ::sim7000_async::modem::ModemContext =
+            ::sim7000_async::modem::ModemContext::new();
 
         let spawner: &Spawner = $spawner;
         let (modem, tx_pump, rx_pump, drop_pump) =

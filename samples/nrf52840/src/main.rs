@@ -12,7 +12,7 @@ use embassy_nrf::{
     interrupt, uarte,
 };
 use embassy_time::{with_timeout, Duration, Timer};
-use sim7000_async::{modem::ModemContext, spawn_modem, ModemPower, PowerState};
+use sim7000_async::{spawn_modem, ModemPower, PowerState};
 
 use defmt_rtt as _; // linker shenanigans
 
