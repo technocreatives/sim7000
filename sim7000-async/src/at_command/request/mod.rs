@@ -6,6 +6,7 @@ pub trait ATRequest {
 pub mod at;
 pub mod ate;
 pub mod cbatchk;
+pub mod ccid;
 pub mod cedrxs;
 pub mod cfgri;
 pub mod cgnspwr;
@@ -30,6 +31,7 @@ pub mod ipr;
 pub use at::At;
 pub use ate::SetEcho;
 pub use cbatchk::EnableVBatCheck;
+pub use ccid::ShowIccid;
 pub use cedrxs::{AcTType, ConfigureEDRX, EDRXSetting};
 pub use cfgri::{ConfigureRiPin, RiPinMode};
 pub use cgnspwr::SetGnssPower;

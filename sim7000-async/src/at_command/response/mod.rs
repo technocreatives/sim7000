@@ -1,5 +1,10 @@
 use super::{ATParseErr, ATParseLine};
-use crate::util::collect_array;
+
+pub mod ccid;
+pub mod cifsrex;
+
+pub use ccid::Iccid;
+pub use cifsrex::IpExt;
 
 #[derive(Debug)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
@@ -26,12 +31,6 @@ pub struct WritePrompt;
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct CloseOk {
     pub connection: usize,
-}
-
-#[derive(Debug)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
-pub struct IpExt {
-    pub addr: [u8; 4],
 }
 
 pub trait ATResponse: Sized {
@@ -111,27 +110,6 @@ impl ATResponse for CloseOk {
     }
 }
 
-impl ATParseLine for IpExt {
-    fn from_line(line: &str) -> Result<Self, ATParseErr> {
-        let addr = line
-            .strip_prefix("+CIFSREX: ")
-            .ok_or("Missing '+CIFSREX: '")?;
-        let addr = collect_array(addr.splitn(4, '.').filter_map(|seg| seg.parse().ok()))
-            .ok_or("Failed to parse IP segment")?;
-
-        Ok(IpExt { addr })
-    }
-}
-
-impl ATResponse for IpExt {
-    fn from_generic(code: ResponseCode) -> Result<Self, ResponseCode> {
-        match code {
-            ResponseCode::IpExt(ip_ext) => Ok(ip_ext),
-            _ => Err(code),
-        }
-    }
-}
-
 /// Sim7000 AT-command response code
 #[derive(Debug)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
@@ -141,6 +119,7 @@ pub enum ResponseCode {
     WritePrompt(WritePrompt), // "> "
     CloseOk(CloseOk),
     IpExt(IpExt),
+    Iccid(Iccid),
 }
 
 impl ATParseLine for ResponseCode {
@@ -159,6 +138,7 @@ impl ATParseLine for ResponseCode {
             .or_else(parse(line, ResponseCode::WritePrompt))
             .or_else(parse(line, ResponseCode::CloseOk))
             .or_else(parse(line, ResponseCode::IpExt))
+            .or_else(parse(line, ResponseCode::Iccid))
             .map_err(|_| "Unknown response code".into())
     }
 }
