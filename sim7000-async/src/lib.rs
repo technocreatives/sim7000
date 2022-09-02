@@ -25,10 +25,27 @@ pub(crate) use defmt as log;
 pub(crate) use log;
 
 use at_command::response::SimError;
+use read::Read;
+use write::Write;
 use core::future::Future;
 
 pub trait SerialError {
     type Error: core::fmt::Debug;
+}
+
+pub trait BuildIo {
+    type IO<'d>: Read + Write + SplitIo
+    where Self: 'd;
+    fn build<'d>(&'d mut self) -> Self::IO<'d>;
+}
+
+pub trait SplitIo {
+    type Reader<'u>: Read
+    where Self: 'u;
+    type Writer<'u>: Write
+    where Self: 'u;
+
+    fn split<'u>(&'u mut self) -> (Self::Reader<'u>, Self::Writer<'u>);
 }
 
 #[derive(Debug)]

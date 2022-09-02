@@ -1,9 +1,9 @@
-use crate::write::Write;
+use crate::{write::Write, BuildIo, SplitIo, SerialError};
 use core::future::Future;
 use embassy_sync::{
     blocking_mutex::raw::CriticalSectionRawMutex,
     channel::{Receiver, Sender},
-    signal::Signal,
+    signal::Signal, pipe::{Writer, Reader},
 };
 use embassy_time::{with_timeout, Duration};
 use heapless::Vec;
@@ -170,6 +170,47 @@ impl<'context> Pump for DropPump<'context> {
             drop_message.clean_up(self.context);
 
             Ok(())
+        }
+    }
+}
+
+
+pub struct RawIoPump<'context, RW> {
+    io: RW,
+    // sends data to the rx pump
+    rx: Writer<'context, CriticalSectionRawMutex, 2048>,
+    // reads data from the tx pump
+    tx: Reader<'context, CriticalSectionRawMutex, 2048>,
+}
+
+impl<'context, RW: 'static + BuildIo + SerialError> Pump for RawIoPump<'context, RW> {
+    type Err = Error;
+    type Fut<'a> = impl Future<Output = Result<(), Self::Err>> + 'a
+    where
+        Self: 'a;
+
+    fn pump(&mut self) -> Self::Fut<'_> {
+        async {
+            let mut io = self.io.build();
+            let (mut reader, mut writer) = io.split();
+            loop {
+                let mut tx_buf = [0u8; 256];
+                let mut rx_buf = [0u8; 256];
+
+                match embassy_futures::select::select(self.tx.read(&mut tx_buf), reader.read(&mut rx_buf)).await {
+                    embassy_futures::select::Either::First(bytes) => {
+                        writer.write_all(&tx_buf[..bytes]).await.map_err(|_| Error::Serial)?;
+                    }
+                    embassy_futures::select::Either::Second(result) => {
+                        let bytes = result.map_err(|_| Error::Serial)?;
+                        self.rx.write(&rx_buf[..bytes]).await;
+                    }
+                }
+                self.tx.read(&mut tx_buf).await;
+                writer.write_all(&tx_buf).await;
+                reader.read(&mut rx_buf).await;
+                self.rx.write(&rx_buf).await;
+            }
         }
     }
 }
