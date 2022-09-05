@@ -1,9 +1,11 @@
-use crate::{write::Write, BuildIo, SplitIo, SerialError};
+use crate::{write::Write, BuildIo, SerialError, SplitIo};
 use core::future::Future;
+use embassy_futures::{select, Either};
 use embassy_sync::{
     blocking_mutex::raw::CriticalSectionRawMutex,
     channel::{Receiver, Sender},
-    signal::Signal, pipe::{Writer, Reader},
+    pipe::{Reader, Writer},
+    signal::Signal,
 };
 use embassy_time::{with_timeout, Duration};
 use heapless::Vec;
@@ -174,7 +176,6 @@ impl<'context> Pump for DropPump<'context> {
     }
 }
 
-
 pub struct RawIoPump<'context, RW> {
     io: RW,
     // sends data to the rx pump
@@ -197,11 +198,14 @@ impl<'context, RW: 'static + BuildIo + SerialError> Pump for RawIoPump<'context,
                 let mut tx_buf = [0u8; 256];
                 let mut rx_buf = [0u8; 256];
 
-                match embassy_futures::select::select(self.tx.read(&mut tx_buf), reader.read(&mut rx_buf)).await {
-                    embassy_futures::select::Either::First(bytes) => {
-                        writer.write_all(&tx_buf[..bytes]).await.map_err(|_| Error::Serial)?;
+                match select(self.tx.read(&mut tx_buf), reader.read(&mut rx_buf)).await {
+                    Either::First(bytes) => {
+                        writer
+                            .write_all(&tx_buf[..bytes])
+                            .await
+                            .map_err(|_| Error::Serial)?;
                     }
-                    embassy_futures::select::Either::Second(result) => {
+                    Either::Second(result) => {
                         let bytes = result.map_err(|_| Error::Serial)?;
                         self.rx.write(&rx_buf[..bytes]).await;
                     }
