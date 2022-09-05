@@ -1,6 +1,6 @@
 use crate::{write::Write, BuildIo, SerialError, SplitIo};
 use core::future::Future;
-use embassy_futures::{select, Either};
+use embassy_futures::select::{select, Either};
 use embassy_sync::{
     blocking_mutex::raw::CriticalSectionRawMutex,
     channel::{Receiver, Sender},
