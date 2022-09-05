@@ -2,9 +2,11 @@ use super::{ATParseErr, ATParseLine};
 
 pub mod ccid;
 pub mod cifsrex;
+pub mod csq;
 
 pub use ccid::Iccid;
 pub use cifsrex::IpExt;
+pub use csq::SignalQuality;
 
 #[derive(Debug)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
@@ -120,6 +122,7 @@ pub enum ResponseCode {
     CloseOk(CloseOk),
     IpExt(IpExt),
     Iccid(Iccid),
+    SignalQuality(SignalQuality),
 }
 
 impl ATParseLine for ResponseCode {
@@ -139,6 +142,7 @@ impl ATParseLine for ResponseCode {
             .or_else(parse(line, ResponseCode::CloseOk))
             .or_else(parse(line, ResponseCode::IpExt))
             .or_else(parse(line, ResponseCode::Iccid))
+            .or_else(parse(line, ResponseCode::SignalQuality))
             .map_err(|_| "Unknown response code".into())
     }
 }
