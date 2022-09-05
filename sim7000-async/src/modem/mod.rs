@@ -7,6 +7,7 @@ use heapless::Vec;
 use crate::{
     at_command::{
         request::*,
+        response::{SignalQuality, SystemInfo},
         unsolicited::{ConnectionMessage, RegistrationStatus},
     },
     drop::{AsyncDrop, DropMessage},
@@ -265,5 +266,20 @@ impl<'c, P: ModemPower> Modem<'c, P> {
 
     pub async fn claim_voltage_warner(&mut self) -> Option<VoltageWarner<'c>> {
         VoltageWarner::take(&self.context.voltage_slot)
+    }
+
+    pub async fn query_system_info(&mut self) -> Result<SystemInfo, Error> {
+        let (info, _) = self.commands.lock().await.run(cpsi::GetSystemInfo).await?;
+        Ok(info)
+    }
+
+    pub async fn query_signal(&mut self) -> Result<SignalQuality, Error> {
+        let (signal, _) = self
+            .commands
+            .lock()
+            .await
+            .run(csq::GetSignalQuality)
+            .await?;
+        Ok(signal)
     }
 }

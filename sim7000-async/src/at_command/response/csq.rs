@@ -22,7 +22,7 @@ impl ATParseLine for SignalQuality {
         let rssi: Option<i32> = match rssi {
             0 => Some(-115),
             1 => Some(-111),
-            i @ 2..=30 => Some(-110 + (i as i32 - 2) * 2),
+            i @ 2..=31 => Some(-110 + (i as i32 - 2) * 2),
             99 => None,
             _ => return Err("Invalid RSSI value".into()),
         };
