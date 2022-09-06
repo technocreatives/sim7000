@@ -7,23 +7,25 @@ use crate::util::collect_array;
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum GnssReport {
     NotEnabled,
-    NoFix {
-        sat_gps_view: Option<u32>,
-    },
-    Fix {
-        latitude: f32,
-        longitude: f32,
-        altitude: f32,
-        hdop: f32,
-        pdop: f32,
-        vdop: f32,
-        speed_over_ground: f32,
-        course_over_ground: f32,
-        sat_gps_in_view: u32,
-        sat_gnss_used: u32,
-        sat_glonass_used: u32,
-        signal_noise_ratio: u32,
-    },
+    NoFix { sat_gps_view: Option<u32> },
+    Fix(GnssFix),
+}
+
+#[derive(Debug, PartialEq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+pub struct GnssFix {
+    pub latitude: f32,
+    pub longitude: f32,
+    pub altitude: f32,
+    pub hdop: f32,
+    pub pdop: f32,
+    pub vdop: f32,
+    pub speed_over_ground: f32,
+    pub course_over_ground: f32,
+    pub sat_gps_in_view: u32,
+    pub sat_gnss_used: u32,
+    pub sat_glonass_used: u32,
+    pub signal_noise_ratio: u32,
 }
 
 impl ATParseLine for GnssReport {
@@ -53,7 +55,7 @@ impl ATParseLine for GnssReport {
                 .or_else(|e| s.is_empty().then(T::default).ok_or(e))
         }
 
-        Ok(GnssReport::Fix {
+        Ok(GnssReport::Fix(GnssFix {
             latitude: latitude.parse()?,
             longitude: longitude.parse()?,
             altitude: msl_altitude.parse()?,
@@ -72,7 +74,7 @@ impl ATParseLine for GnssReport {
             sat_gps_in_view: parse_optional(sat_gps_in_view)?,
             sat_gnss_used: parse_optional(sat_gnss_used)?,
             sat_glonass_used: parse_optional(sat_glonass_used)?,
-        })
+        }))
     }
 }
 
@@ -85,7 +87,7 @@ mod test {
         let gnss_str = "+UGNSINF: 1,1,20171103022632.000,31.222067,121.354368,34.700,0.00,0.0,1,,1.1,1.4,0.9,,21,6,,,45,,";
         let gnss = GnssReport::from_line(gnss_str).expect("Parse GnssReport");
 
-        let expected = GnssReport::Fix {
+        let expected = GnssReport::Fix(GnssFix {
             latitude: 31.222067,
             longitude: 121.354368,
             altitude: 34.7,
@@ -98,7 +100,7 @@ mod test {
             sat_gnss_used: 6,
             sat_glonass_used: 0,
             signal_noise_ratio: 45,
-        };
+        });
 
         assert_eq!(expected, gnss);
     }
@@ -109,7 +111,7 @@ mod test {
             "+UGNSINF: 1,1,20220126140944.000,57.715185,11.973960,44.600,0.00,214.5,1,,1.4,,,,29,5,,,52,,";
         let gnss = GnssReport::from_line(gnss_str).expect("Parse GnssReport");
 
-        let expected = GnssReport::Fix {
+        let expected = GnssReport::Fix(GnssFix {
             latitude: 57.715185,
             longitude: 11.973960,
             altitude: 44.6,
@@ -122,7 +124,7 @@ mod test {
             sat_gnss_used: 5,
             sat_glonass_used: 0,
             signal_noise_ratio: 52,
-        };
+        });
 
         assert_eq!(expected, gnss);
     }
