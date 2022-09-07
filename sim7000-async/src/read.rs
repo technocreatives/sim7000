@@ -1,32 +1,18 @@
 use core::future::Future;
 use core::str::from_utf8;
+use embassy_sync::{pipe::Reader, blocking_mutex::raw::CriticalSectionRawMutex};
+use embedded_io::asynch::Read;
 use heapless::{String, Vec};
 
 use crate::{log, Error, SerialError};
 
-pub trait Read: SerialError {
-    /// Future returned by the `read` method.
-    type ReadFuture<'a>: Future<Output = Result<usize, Self::Error>> + 'a
-    where
-        Self: 'a;
-
-    type ReadExactFuture<'a>: Future<Output = Result<(), Self::Error>> + 'a
-    where
-        Self: 'a;
-
-    fn read_exact<'a>(&'a mut self, buf: &'a mut [u8]) -> Self::ReadExactFuture<'a>;
-
-    /// Reads words from the serial interface into the supplied slice.
-    fn read<'a>(&'a mut self, read: &'a mut [u8]) -> Self::ReadFuture<'a>;
-}
-
-pub struct ModemReader<R> {
-    read: R,
+pub struct ModemReader<'context> {
+    read: Reader<'context, CriticalSectionRawMutex, 2048>,
     buffer: Vec<u8, 256>,
 }
 
-impl<R: Read> ModemReader<R> {
-    pub fn new(read: R) -> ModemReader<R> {
+impl<'context> ModemReader<'context> {
+    pub fn new(read: Reader<'context, CriticalSectionRawMutex, 2048>) -> ModemReader<'context> {
         ModemReader {
             read,
             buffer: Vec::new(),
@@ -89,11 +75,10 @@ impl<R: Read> ModemReader<R> {
             }
 
             let mut buf = [0u8; 256];
-            let amount = self
-                .read
-                .read(&mut buf[..self.buffer.capacity() - self.buffer.len()])
+            let amount = Read::read(&mut self
+                .read, &mut buf[..self.buffer.capacity() - self.buffer.len()])
                 .await
-                .map_err(|_| Error::Serial)?; // TODO: figure out error types
+                .map_err(|_| Error::Serial)?;
 
             self.buffer
                 .extend_from_slice(&buf[..amount])

@@ -1,4 +1,5 @@
 use core::future::Future;
+use embedded_io::{asynch::{Write, Read}, Io};
 use futures_util::future::Either;
 use heapless::Vec;
 
@@ -8,9 +9,6 @@ use crate::{
     drop::AsyncDrop,
     log,
     modem::{CommandRunner, TcpToken},
-    read::Read,
-    write::Write,
-    SerialError,
 };
 
 /// The maximum number of parallel connections supported by the modem
@@ -24,6 +22,12 @@ pub enum TcpError {
     Closed,
 }
 
+impl embedded_io::Error for TcpError {
+    fn kind(&self) -> embedded_io::ErrorKind {
+        embedded_io::ErrorKind::Other
+    }
+}
+
 pub struct TcpStream<'s> {
     pub(crate) token: TcpToken<'s>,
     pub(crate) _drop: AsyncDrop<'s>,
@@ -32,7 +36,7 @@ pub struct TcpStream<'s> {
     pub(crate) buffer: Vec<u8, 365>,
 }
 
-impl<'s> SerialError for TcpStream<'s> {
+impl<'s> Io for TcpStream<'s> {
     type Error = TcpError;
 }
 
@@ -149,7 +153,7 @@ impl Drop for TcpStream<'_> {
 }
 
 impl<'s> Write for TcpStream<'s> {
-    type WriteAllFuture<'a> = impl Future<Output = Result<(), Self::Error>> + 'a
+    type WriteFuture<'a> = impl Future<Output = Result<usize, Self::Error>> + 'a
     where
         Self: 'a;
 
@@ -157,8 +161,11 @@ impl<'s> Write for TcpStream<'s> {
     where
         Self: 'a;
 
-    fn write_all<'a>(&'a mut self, words: &'a [u8]) -> Self::WriteAllFuture<'a> {
-        self.send_tcp(words)
+    fn write<'a>(&'a mut self, words: &'a [u8]) -> Self::WriteFuture<'a> {
+        async {
+            self.send_tcp(words).await?;
+            Ok(words.len())
+        }
     }
 
     fn flush(&mut self) -> Self::FlushFuture<'_> {
@@ -170,14 +177,6 @@ impl<'s> Read for TcpStream<'s> {
     type ReadFuture<'a> = impl Future<Output = Result<usize, Self::Error>> + 'a
     where
         Self: 'a;
-
-    type ReadExactFuture<'a> = impl Future<Output = Result<(), Self::Error>> + 'a
-    where
-        Self: 'a;
-
-    fn read_exact<'a>(&'a mut self, buf: &'a mut [u8]) -> Self::ReadExactFuture<'a> {
-        self.inner_read_exact(buf)
-    }
 
     fn read<'a>(&'a mut self, read: &'a mut [u8]) -> Self::ReadFuture<'a> {
         self.inner_read(read)

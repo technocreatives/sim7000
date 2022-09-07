@@ -12,12 +12,11 @@ use crate::{
     },
     drop::{AsyncDrop, DropMessage},
     gnss::Gnss,
-    pump::{DropPump, RxPump, TxPump},
-    read::{ModemReader, Read},
+    pump::{DropPump, RxPump, TxPump, RawIoPump},
+    read::{ModemReader},
     tcp::TcpStream,
     voltage::VoltageWarner,
-    write::Write,
-    Error, ModemPower,
+    Error, ModemPower, BuildIo,
 };
 pub use command::{CommandRunner, CommandRunnerGuard, RawAtCommand};
 pub use context::*;
@@ -34,20 +33,25 @@ pub struct Modem<'c, P> {
 }
 
 impl<'c, P: ModemPower> Modem<'c, P> {
-    pub async fn new<R: Read, W: Write>(
-        rx: R,
-        tx: W,
+    pub async fn new<I: BuildIo>(
+        io: I,
         power: P,
         context: &'c ModemContext,
-    ) -> Result<(Modem<'c, P>, TxPump<'c, W>, RxPump<'c, R>, DropPump<'c>), Error> {
+    ) -> Result<(Modem<'c, P>, RawIoPump<'c, I>, TxPump<'c>, RxPump<'c>, DropPump<'c>), Error> {
         let modem = Modem {
             commands: context.commands(),
             context,
             power,
         };
 
+        let io_pump = RawIoPump {
+            io,
+            rx: context.rx_pipe.writer(),
+            tx: context.tx_pipe.reader(),
+        };
+
         let rx_pump = RxPump {
-            reader: ModemReader::new(rx),
+            reader: ModemReader::new(context.rx_pipe.reader()),
             generic_response: context.generic_response.sender(),
             registration_events: &context.registration_events,
             tcp: &context.tcp,
@@ -56,13 +60,13 @@ impl<'c, P: ModemPower> Modem<'c, P> {
         };
 
         let tx_pump = TxPump {
-            writer: tx,
+            writer: context.tx_pipe.writer(),
             commands: context.commands.receiver(),
         };
 
         let drop_pump = DropPump { context };
 
-        Ok((modem, tx_pump, rx_pump, drop_pump))
+        Ok((modem, io_pump, tx_pump, rx_pump, drop_pump))
     }
 
     pub async fn init(&mut self) -> Result<(), Error> {

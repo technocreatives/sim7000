@@ -1,4 +1,4 @@
-use crate::{write::Write, BuildIo, SerialError, SplitIo};
+use crate::{BuildIo, SplitIo, SerialError};
 use core::future::Future;
 use embassy_futures::select::{select, Either};
 use embassy_sync::{
@@ -8,6 +8,7 @@ use embassy_sync::{
     signal::Signal,
 };
 use embassy_time::{with_timeout, Duration};
+use embedded_io::asynch::{Write, Read};
 use heapless::Vec;
 
 use crate::at_command::{
@@ -17,7 +18,7 @@ use crate::at_command::{
 };
 use crate::log;
 use crate::modem::{ModemContext, RawAtCommand, TcpContext};
-use crate::read::{ModemReader, Read};
+use crate::read::{ModemReader};
 use crate::Error;
 
 pub const PUMP_COUNT: usize = 3;
@@ -31,8 +32,8 @@ pub trait Pump {
     fn pump(&mut self) -> Self::Fut<'_>;
 }
 
-pub struct RxPump<'context, R> {
-    pub(crate) reader: ModemReader<R>,
+pub struct RxPump<'context> {
+    pub(crate) reader: ModemReader<'context>,
     pub(crate) generic_response: Sender<'context, CriticalSectionRawMutex, ResponseCode, 1>,
     pub(crate) tcp: &'context TcpContext,
     pub(crate) gnss: &'context Signal<GnssReport>,
@@ -40,7 +41,7 @@ pub struct RxPump<'context, R> {
     pub(crate) registration_events: &'context Signal<RegistrationStatus>,
 }
 
-impl<'context, R: Read> Pump for RxPump<'context, R> {
+impl<'context> Pump for RxPump<'context> {
     type Err = Error;
     type Fut<'a> = impl Future<Output = Result<(), Self::Err>> + 'a
     where
@@ -127,13 +128,13 @@ impl<'context, R: Read> Pump for RxPump<'context, R> {
     }
 }
 
-pub struct TxPump<'context, W> {
-    pub(crate) writer: W,
+pub struct TxPump<'context> {
+    pub(crate) writer: Writer<'context, CriticalSectionRawMutex, 2048>,
     pub(crate) commands: Receiver<'context, CriticalSectionRawMutex, RawAtCommand, 4>,
 }
 
-impl<'context, W: Write> Pump for TxPump<'context, W> {
-    type Err = W::Error;
+impl<'context> Pump for TxPump<'context> {
+    type Err = Error;
     type Fut<'a> = impl Future<Output = Result<(), Self::Err>> + 'a
     where
         Self: 'a;
@@ -145,7 +146,7 @@ impl<'context, W: Write> Pump for TxPump<'context, W> {
                 RawAtCommand::Text(text) => log::info!("Write to modem: {:?}", text.as_str()),
                 RawAtCommand::Binary(bytes) => log::info!("Write {} bytes to modem", bytes.len()),
             }
-            self.writer.write_all(command.as_bytes()).await?;
+            self.writer.write(command.as_bytes()).await;
 
             Ok(())
         }
@@ -177,14 +178,14 @@ impl<'context> Pump for DropPump<'context> {
 }
 
 pub struct RawIoPump<'context, RW> {
-    io: RW,
+    pub(crate) io: RW,
     // sends data to the rx pump
-    rx: Writer<'context, CriticalSectionRawMutex, 2048>,
+    pub(crate) rx: Writer<'context, CriticalSectionRawMutex, 2048>,
     // reads data from the tx pump
-    tx: Reader<'context, CriticalSectionRawMutex, 2048>,
+    pub(crate) tx: Reader<'context, CriticalSectionRawMutex, 2048>,
 }
 
-impl<'context, RW: 'static + BuildIo + SerialError> Pump for RawIoPump<'context, RW> {
+impl<'context, RW: 'static + BuildIo> Pump for RawIoPump<'context, RW> {
     type Err = Error;
     type Fut<'a> = impl Future<Output = Result<(), Self::Err>> + 'a
     where
