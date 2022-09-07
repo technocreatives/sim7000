@@ -3,11 +3,13 @@
 use crate::Modem;
 use core::future::Future;
 use core::str::{from_utf8, Utf8Error};
+use cortex_m::prelude::_embedded_hal_blocking_i2c_Read;
 use embassy_executor::{SpawnError, Spawner};
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::channel::Channel;
+use embedded_io::{asynch::{Read, Write}, blocking::ReadExactError};
 use heapless::Vec;
-use sim7000_async::{gnss::Gnss, read::Read, tcp::TcpStream, voltage::VoltageWarner, write::Write};
+use sim7000_async::{gnss::Gnss, tcp::{TcpStream, TcpError}, voltage::VoltageWarner };
 
 #[derive(Debug)]
 pub enum Error {
@@ -53,7 +55,10 @@ pub async fn ping_tcpbin(
                     defmt::info!("Reading Polo");
                     let mut buf = [0u8; MARCO.len()];
 
-                    stream.read_exact(&mut buf).await?;
+                    stream.read_exact(&mut buf).await.map_err(|err| match err {
+                        ReadExactError::Other(err) => err,
+                        ReadExactError::UnexpectedEof => TcpError::Closed,
+                    })?;
 
                     let polo = from_utf8(&buf)?;
 

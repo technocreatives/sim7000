@@ -578,6 +578,7 @@ dependencies = [
  "embassy-nrf",
  "embassy-sync",
  "embassy-time",
+ "embedded-io",
  "futures",
  "heapless",
  "panic-rtt-target",
@@ -780,6 +781,7 @@ dependencies = [
  "embassy-time",
  "embedded-hal 1.0.0-alpha.8",
  "embedded-hal-async",
+ "embedded-io",
  "futures-util",
  "heapless",
 ]

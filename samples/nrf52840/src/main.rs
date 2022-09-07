@@ -8,11 +8,14 @@ mod example;
 use core::future::Future;
 use embassy_executor::Spawner;
 use embassy_nrf::{
+    buffered_uarte::{BufferedUarte, BufferedUarteRx, BufferedUarteTx, State},
     gpio::{AnyPin, Input, Level, Output, OutputDrive, Pin, Pull},
-    interrupt, uarte,
+    interrupt::{self, UARTE0_UART0},
+    peripherals::{PPI_CH1, PPI_CH2, TIMER0, UARTE0},
+    uarte,
 };
 use embassy_time::{with_timeout, Duration, Timer};
-use sim7000_async::{spawn_modem, ModemPower, PowerState};
+use sim7000_async::{spawn_modem, BuildIo, ModemPower, PowerState, SplitIo};
 
 use defmt_rtt as _; // linker shenanigans
 
@@ -37,10 +40,6 @@ async fn main(spawner: Spawner) {
     let mut config = uarte::Config::default();
     config.parity = uarte::Parity::EXCLUDED;
     config.baudrate = uarte::Baudrate::BAUD115200;
-    let (tx, rx) = embassy_nrf::uarte::UarteWithIdle::new_with_rtscts(
-        p.UARTE0, p.TIMER0, p.PPI_CH0, p.PPI_CH1, irq, p.P0_20, p.P0_24, p.P0_08, p.P0_11, config,
-    )
-    .split();
 
     let power_pins = ModemPowerPins {
         status: Input::new(p.P1_07.degrade(), Pull::None),
@@ -52,8 +51,7 @@ async fn main(spawner: Spawner) {
 
     let mut modem = spawn_modem!(
         &spawner,
-        AppUarteRead<'static> as AppUarteRead(rx),
-        AppUarteWrite<'static> as AppUarteWrite(tx),
+        UarteComponents as UarteComponents { uarte: p.UARTE0, timer: p.TIMER0, ppi_ch1: p.PPI_CH1, ppi_ch2: p.PPI_CH2, irq, rxd: p.P0_20.degrade(), txd: p.P0_24.degrade(), rts: p.P0_08.degrade(), cts: p.P0_11.degrade(), config, state: State::new(), tx_buffer: [0; 256], rx_buffer: [0; 256] },
         power_pins
     );
 
@@ -119,6 +117,74 @@ async fn main(spawner: Spawner) {
     }
 }
 
+struct UarteComponents {
+    uarte: UARTE0,
+    timer: TIMER0,
+    ppi_ch1: PPI_CH1,
+    ppi_ch2: PPI_CH2,
+    irq: UARTE0_UART0,
+    rxd: AnyPin,
+    txd: AnyPin,
+    rts: AnyPin,
+    cts: AnyPin,
+    config: uarte::Config,
+    state: State<'static, UARTE0, TIMER0>,
+    tx_buffer: [u8; 256],
+    rx_buffer: [u8; 256],
+}
+
+impl BuildIo for UarteComponents {
+    type IO<'d> = AppUarte<'d>
+    where
+    Self: 'd;
+
+    fn build<'d>(&'d mut self) -> Self::IO<'d> {
+        let state = unsafe {
+            core::mem::transmute::<
+                &'d mut State<'static, UARTE0, TIMER0>,
+                &'d mut State<'d, UARTE0, TIMER0>,
+            >(&mut self.state)
+        };
+        AppUarte(BufferedUarte::new(
+            state,
+            &mut self.uarte,
+            &mut self.timer,
+            &mut self.ppi_ch1,
+            &mut self.ppi_ch2,
+            &mut self.irq,
+            &mut self.rxd,
+            &mut self.txd,
+            &mut self.cts,
+            &mut self.rts,
+            self.config.clone(),
+            &mut self.rx_buffer,
+            &mut self.tx_buffer,
+        ))
+    }
+}
+
+struct AppUarte<'d>(
+    embassy_nrf::buffered_uarte::BufferedUarte<
+        'd,
+        embassy_nrf::peripherals::UARTE0,
+        embassy_nrf::peripherals::TIMER0,
+    >,
+);
+
+impl<'d> SplitIo for AppUarte<'d> {
+    type Reader<'u> = BufferedUarteRx<'u, 'd, UARTE0, TIMER0>
+    where
+    Self: 'u;
+
+    type Writer<'u> = BufferedUarteTx<'u, 'd, UARTE0, TIMER0>
+    where
+    Self: 'u;
+
+    fn split<'u>(&'u mut self) -> (Self::Reader<'u>, Self::Writer<'u>) {
+        self.0.split()
+    }
+}
+
 #[repr(transparent)]
 struct AppUarteRead<'d>(
     embassy_nrf::uarte::UarteRxWithIdle<
@@ -128,22 +194,14 @@ struct AppUarteRead<'d>(
     >,
 );
 
-impl<'d> sim7000_async::SerialError for AppUarteRead<'d> {
-    type Error = embassy_nrf::uarte::Error;
+impl<'d> embedded_io::Io for AppUarteRead<'d> {
+    type Error = sim7000_async::Error;
 }
 
-impl<'d> sim7000_async::read::Read for AppUarteRead<'d> {
+impl<'d> embedded_io::asynch::Read for AppUarteRead<'d> {
     type ReadFuture<'a> = impl Future<Output = Result<usize, Self::Error>> + 'a
     where
     Self: 'a;
-
-    type ReadExactFuture<'a> = impl Future<Output = Result<(), Self::Error>> + 'a
-    where
-        Self: 'a;
-
-    fn read_exact<'a>(&'a mut self, buf: &'a mut [u8]) -> Self::ReadExactFuture<'a> {
-        self.0.read(buf)
-    }
 
     fn read<'a>(&'a mut self, read: &'a mut [u8]) -> Self::ReadFuture<'a> {
         async move {
@@ -152,7 +210,7 @@ impl<'d> sim7000_async::read::Read for AppUarteRead<'d> {
                 .await
             {
                 Ok(Ok(result)) => result,
-                Ok(Err(err)) => return Err(err),
+                Ok(Err(err)) => return Err(sim7000_async::Error::Serial),
                 Err(_) => 0,
             };
 
@@ -167,12 +225,12 @@ impl<'d> sim7000_async::read::Read for AppUarteRead<'d> {
 
 struct AppUarteWrite<'d>(embassy_nrf::uarte::UarteTx<'d, embassy_nrf::peripherals::UARTE0>);
 
-impl<'d> sim7000_async::SerialError for AppUarteWrite<'d> {
-    type Error = embassy_nrf::uarte::Error;
+impl<'d> embedded_io::Io for AppUarteWrite<'d> {
+    type Error = sim7000_async::Error;
 }
 
-impl<'d> sim7000_async::write::Write for AppUarteWrite<'d> {
-    type WriteAllFuture<'a> = impl Future<Output = Result<(), Self::Error>> + 'a
+impl<'d> embedded_io::asynch::Write for AppUarteWrite<'d> {
+    type WriteFuture<'a> = impl Future<Output = Result<usize, Self::Error>> + 'a
     where
         Self: 'a;
 
@@ -180,8 +238,11 @@ impl<'d> sim7000_async::write::Write for AppUarteWrite<'d> {
     where
         Self: 'a;
 
-    fn write_all<'a>(&'a mut self, words: &'a [u8]) -> Self::WriteAllFuture<'a> {
-        self.0.write(words)
+    fn write<'a>(&'a mut self, words: &'a [u8]) -> Self::WriteFuture<'a> {
+        async {
+            self.0.write(words).await.map_err(|_| sim7000_async::Error::Serial)?;
+            Ok(words.len())
+        }
     }
 
     fn flush(&mut self) -> Self::FlushFuture<'_> {
