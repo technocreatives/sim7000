@@ -1,6 +1,6 @@
 use embassy_sync::signal::Signal;
 
-use crate::at_command::unsolicited::GnssReport;
+use crate::at_command::unsolicited::{GnssFix, GnssReport};
 use crate::drop::{AsyncDrop, DropChannel, DropMessage};
 
 pub const GNSS_SLOTS: usize = 1;
@@ -17,7 +17,18 @@ impl<'c> Gnss<'c> {
             reports,
         }
     }
-    pub async fn report(&self) -> GnssReport {
+
+    /// Wait until the next GNSS report.
+    pub async fn get_report(&self) -> GnssReport {
         self.reports.wait().await
+    }
+
+    /// Wait until the GNSS reports a fix on our location.
+    pub async fn get_fix(&self) -> GnssFix {
+        loop {
+            if let GnssReport::Fix(fix) = self.reports.wait().await {
+                return fix;
+            }
+        }
     }
 }

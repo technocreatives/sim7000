@@ -7,9 +7,16 @@ use cortex_m::prelude::_embedded_hal_blocking_i2c_Read;
 use embassy_executor::{SpawnError, Spawner};
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::channel::Channel;
-use embedded_io::{asynch::{Read, Write}, blocking::ReadExactError};
+use embedded_io::{
+    asynch::{Read, Write},
+    blocking::ReadExactError,
+};
 use heapless::Vec;
-use sim7000_async::{gnss::Gnss, tcp::{TcpStream, TcpError}, voltage::VoltageWarner };
+use sim7000_async::{
+    gnss::Gnss,
+    tcp::{TcpError, TcpStream},
+    voltage::VoltageWarner,
+};
 
 #[derive(Debug)]
 pub enum Error {
@@ -32,7 +39,7 @@ pub async fn voltage_warn(warner: VoltageWarner<'static>) {
 #[embassy_executor::task]
 pub async fn gnss(gnss: Gnss<'static>) {
     loop {
-        let report = gnss.report().await;
+        let report = gnss.get_report().await;
         defmt::info!("GNSS report: {:?}", report);
     }
 }
