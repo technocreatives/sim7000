@@ -118,19 +118,19 @@ async fn main(spawner: Spawner) {
 }
 
 struct UarteComponents {
-    uarte: UARTE0,
-    timer: TIMER0,
-    ppi_ch1: PPI_CH1,
-    ppi_ch2: PPI_CH2,
-    irq: UARTE0_UART0,
-    rxd: AnyPin,
-    txd: AnyPin,
-    rts: AnyPin,
-    cts: AnyPin,
-    config: uarte::Config,
-    state: State<'static, UARTE0, TIMER0>,
-    tx_buffer: [u8; 256],
-    rx_buffer: [u8; 256],
+    pub uarte: UARTE0,
+    pub timer: TIMER0,
+    pub ppi_ch1: PPI_CH1,
+    pub ppi_ch2: PPI_CH2,
+    pub irq: UARTE0_UART0,
+    pub rxd: AnyPin,
+    pub txd: AnyPin,
+    pub rts: AnyPin,
+    pub cts: AnyPin,
+    pub config: uarte::Config,
+    pub state: State<'static, UARTE0, TIMER0>,
+    pub tx_buffer: [u8; 256],
+    pub rx_buffer: [u8; 256],
 }
 
 impl BuildIo for UarteComponents {
@@ -240,7 +240,10 @@ impl<'d> embedded_io::asynch::Write for AppUarteWrite<'d> {
 
     fn write<'a>(&'a mut self, words: &'a [u8]) -> Self::WriteFuture<'a> {
         async {
-            self.0.write(words).await.map_err(|_| sim7000_async::Error::Serial)?;
+            self.0
+                .write(words)
+                .await
+                .map_err(|_| sim7000_async::Error::Serial)?;
             Ok(words.len())
         }
     }
