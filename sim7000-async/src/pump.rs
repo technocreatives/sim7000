@@ -1,4 +1,4 @@
-use crate::{BuildIo, SplitIo, SerialError};
+use crate::{BuildIo, SerialError, SplitIo};
 use core::future::Future;
 use embassy_futures::select::{select, Either};
 use embassy_sync::{
@@ -8,7 +8,7 @@ use embassy_sync::{
     signal::Signal,
 };
 use embassy_time::{with_timeout, Duration};
-use embedded_io::asynch::{Write, Read};
+use embedded_io::asynch::{Read, Write};
 use heapless::Vec;
 
 use crate::at_command::{
@@ -18,7 +18,7 @@ use crate::at_command::{
 };
 use crate::log;
 use crate::modem::{ModemContext, RawAtCommand, TcpContext};
-use crate::read::{ModemReader};
+use crate::read::ModemReader;
 use crate::Error;
 
 pub const PUMP_COUNT: usize = 3;
@@ -211,10 +211,6 @@ impl<'context, RW: 'static + BuildIo> Pump for RawIoPump<'context, RW> {
                         self.rx.write(&rx_buf[..bytes]).await;
                     }
                 }
-                self.tx.read(&mut tx_buf).await;
-                writer.write_all(&tx_buf).await;
-                reader.read(&mut rx_buf).await;
-                self.rx.write(&rx_buf).await;
             }
         }
     }
