@@ -51,7 +51,7 @@ async fn main(spawner: Spawner) {
 
     let mut modem = spawn_modem!(
         &spawner,
-        UarteComponents as UarteComponents { uarte: p.UARTE0, timer: p.TIMER0, ppi_ch1: p.PPI_CH1, ppi_ch2: p.PPI_CH2, irq, rxd: p.P0_20.degrade(), txd: p.P0_24.degrade(), rts: p.P0_08.degrade(), cts: p.P0_11.degrade(), config, state: State::new(), tx_buffer: [0; 256], rx_buffer: [0; 256] },
+        UarteComponents as UarteComponents { uarte: p.UARTE0, timer: p.TIMER0, ppi_ch1: p.PPI_CH1, ppi_ch2: p.PPI_CH2, irq, rxd: p.P0_20.degrade(), txd: p.P0_24.degrade(), rts: p.P0_11.degrade(), cts: p.P0_08.degrade(), config, state: State::new(), tx_buffer: [0; 64], rx_buffer: [0; 64] },
         power_pins
     );
 
@@ -129,8 +129,8 @@ struct UarteComponents {
     pub cts: AnyPin,
     pub config: uarte::Config,
     pub state: State<'static, UARTE0, TIMER0>,
-    pub tx_buffer: [u8; 256],
-    pub rx_buffer: [u8; 256],
+    pub tx_buffer: [u8; 64],
+    pub rx_buffer: [u8; 64],
 }
 
 impl BuildIo for UarteComponents {
