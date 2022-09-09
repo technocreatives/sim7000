@@ -24,10 +24,17 @@ impl<'context> ModemReader<'context> {
         const CRLF: &str = "\r\n";
         loop {
             if !self.buffer.is_empty() {
-                log::debug!(
-                    "CURRENT BUFFER {:?}",
-                    from_utf8(&self.buffer).map_err(|_| "Not UTF-8"),
-                );
+
+                match from_utf8(&self.buffer).map_err(|_| "Not UTF-8") {
+                    Ok(line) => log::debug!(
+                        "CURRENT BUFFER {:?}",
+                        line
+                    ),
+                    Err(err) => log::debug!(
+                        "INVALID UTF-8 {:?}",
+                        self.buffer.as_slice()
+                    ),
+                }
             }
 
             if self.buffer.starts_with(MODEM_INPUT_PROMPT.as_bytes()) {
@@ -49,7 +56,14 @@ impl<'context> ModemReader<'context> {
                 // If we see a line break, the modem has probaly sent us a message
 
                 let line_end = position + CRLF.len();
-                let line = from_utf8(&self.buffer[..position]).map_err(|_| Error::InvalidUtf8)?;
+                let line = match from_utf8(&self.buffer[..position]).map_err(|_| Error::InvalidUtf8) {
+                    Ok(line) => line,
+                    Err(err) => {
+                        self.buffer.rotate_left(line_end);
+                        self.buffer.truncate(self.buffer.len() - line_end);
+                        return Err(err);
+                    }
+                };
                 log::debug!("RECV LINE: {:?}", line);
 
                 // Ignore empty lines, as well as echoed lines ending with just a CR

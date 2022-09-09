@@ -1,5 +1,5 @@
 use crate::{BuildIo, SerialError, SplitIo};
-use core::future::Future;
+use core::{future::Future, str::from_utf8};
 use embassy_futures::select::{select, Either};
 use embassy_sync::{
     blocking_mutex::raw::CriticalSectionRawMutex,
@@ -146,7 +146,8 @@ impl<'context> Pump for TxPump<'context> {
                 RawAtCommand::Text(text) => log::info!("Write to modem: {:?}", text.as_str()),
                 RawAtCommand::Binary(bytes) => log::info!("Write {} bytes to modem", bytes.len()),
             }
-            self.writer.write(command.as_bytes()).await;
+            self.writer.write_all(command.as_bytes()).await;
+            self.writer.flush().await;
 
             Ok(())
         }
@@ -205,10 +206,25 @@ impl<'context, RW: 'static + BuildIo> Pump for RawIoPump<'context, RW> {
                             .write_all(&tx_buf[..bytes])
                             .await
                             .map_err(|_| Error::Serial)?;
+    	                writer.flush().await;
+
                     }
                     Either::Second(result) => {
                         let bytes = result.map_err(|_| Error::Serial)?;
-                        self.rx.write(&rx_buf[..bytes]).await;
+
+                        match from_utf8(&rx_buf[..bytes]).map_err(|_| "Not UTF-8") {
+                            Ok(line) => log::debug!(
+                                "BYTES READ {:?}",
+                                line
+                            ),
+                            Err(err) => log::debug!(
+                                "READ INVALID {:?}",
+                                &rx_buf[..bytes]
+                            ),
+                        }
+
+                        self.rx.write_all(&rx_buf[..bytes]).await;
+                        self.rx.flush().await;
                     }
                 }
             }
