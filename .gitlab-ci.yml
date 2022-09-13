@@ -1,0 +1,22 @@
+stages:
+  - deploy
+
+release-crate:
+  image: rust
+  stage: deploy
+  only:
+    - tags
+  before_script:
+    - mkdir -p ~/.ssh
+    - echo -e "Host \"thetc.dev\" exec \"test %p = 2222\"\n    User gitlab-ci-token:$CI_JOB_TOKEN\n    StrictHostKeyChecking no" > ~/.ssh/config
+    - ssh-keygen -t ed25519 -q -f "$HOME/.ssh/id_ed25519" -N ""
+    - cargo install cargo-get
+    - export CRATE_NAME=$(cargo get --name) CRATE_VERSION=$(cargo get version)
+    - export CRATE_FILE=${CRATE_NAME}-${CRATE_VERSION}.crate
+  script:
+    - cargo package --no-verify
+    - cargo metadata --format-version 1 > metadata.json
+    - 'curl --header "JOB-TOKEN: $CI_JOB_TOKEN" --upload-file target/package/${CRATE_FILE} "${CI_API_V4_URL}/projects/1035/packages/generic/${CRATE_NAME}/${CRATE_VERSION}/${CRATE_FILE}"'
+    - 'curl --header "JOB-TOKEN: $CI_JOB_TOKEN" --upload-file metadata.json "${CI_API_V4_URL}/projects/1035/packages/generic/${CRATE_NAME}/${CRATE_VERSION}/metadata.json"'
+Footer
+
