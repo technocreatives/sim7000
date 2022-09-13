@@ -18,5 +18,3 @@ release-crate:
     - cargo metadata --format-version 1 > metadata.json
     - 'curl --header "JOB-TOKEN: $CI_JOB_TOKEN" --upload-file target/package/${CRATE_FILE} "${CI_API_V4_URL}/projects/1035/packages/generic/${CRATE_NAME}/${CRATE_VERSION}/${CRATE_FILE}"'
     - 'curl --header "JOB-TOKEN: $CI_JOB_TOKEN" --upload-file metadata.json "${CI_API_V4_URL}/projects/1035/packages/generic/${CRATE_NAME}/${CRATE_VERSION}/metadata.json"'
-Footer
-
