@@ -34,4 +34,8 @@ impl<T: 'static> Slot<T> {
             log::error!("Tried to release unclaimed Slot<{:?}>", type_name::<T>());
         }
     }
+
+    pub fn is_free(&self) -> bool {
+        self.is_free.fetch_or(false, Ordering::Relaxed)
+    }
 }

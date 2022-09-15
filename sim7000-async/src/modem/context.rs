@@ -24,6 +24,7 @@ pub struct ModemContext {
     pub(crate) registration_events: Signal<RegistrationStatus>,
     pub(crate) gnss_slot: Slot<Signal<GnssReport>>,
     pub(crate) voltage_slot: Slot<Signal<VoltageWarning>>,
+    pub(crate) power_signal: Signal<bool>,
     pub(crate) tx_pipe: Pipe<CriticalSectionRawMutex, 2048>,
     pub(crate) rx_pipe: Pipe<CriticalSectionRawMutex, 2048>,
 }
@@ -39,6 +40,7 @@ impl ModemContext {
             registration_events: Signal::new(),
             gnss_slot: Slot::new(Signal::new()),
             voltage_slot: Slot::new(Signal::new()),
+            power_signal: Signal::new(),
             tx_pipe: Pipe::new(),
             rx_pipe: Pipe::new(),
         }
@@ -94,6 +96,14 @@ impl TcpContext {
                 events,
             })
         })
+    }
+
+    pub async fn disconnect_all(&self) {
+        for slot in &self.slots {
+            if !slot.is_free() {
+                slot.peek().events.send(ConnectionMessage::Closed).await;
+            }
+        }
     }
 }
 

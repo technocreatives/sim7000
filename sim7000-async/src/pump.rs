@@ -1,6 +1,6 @@
 use crate::{BuildIo, SerialError, SplitIo};
 use core::{future::Future, str::from_utf8};
-use embassy_futures::select::{select, Either};
+use embassy_futures::select::{select, Either, select3, Either3};
 use embassy_sync::{
     blocking_mutex::raw::CriticalSectionRawMutex,
     channel::{Receiver, Sender},
@@ -146,8 +146,10 @@ impl<'context> Pump for TxPump<'context> {
                 RawAtCommand::Text(text) => log::info!("Write to modem: {:?}", text.as_str()),
                 RawAtCommand::Binary(bytes) => log::info!("Write {} bytes to modem", bytes.len()),
             }
-            self.writer.write_all(command.as_bytes()).await;
-            self.writer.flush().await;
+
+            // `Writer` is infallible. It is fine to ignore these errors.
+            let _ = self.writer.write_all(command.as_bytes()).await;
+            let _ = self.writer.flush().await;
 
             Ok(())
         }
@@ -184,6 +186,58 @@ pub struct RawIoPump<'context, RW> {
     pub(crate) rx: Writer<'context, CriticalSectionRawMutex, 2048>,
     // reads data from the tx pump
     pub(crate) tx: Reader<'context, CriticalSectionRawMutex, 2048>,
+    pub(crate) power_signal: &'context Signal<bool>,
+    pub(crate) power_state: bool,
+}
+
+impl<'context, RW: 'static + BuildIo> RawIoPump<'context, RW> {
+    pub async fn high_power_pump(&mut self) -> Result<(), Error> {
+        let mut io = self.io.build();
+        let (mut reader, mut writer) = io.split();
+        
+        loop {
+            let mut tx_buf = [0u8; 256];
+            let mut rx_buf = [0u8; 256];
+
+            match select3(self.tx.read(&mut tx_buf), reader.read(&mut rx_buf), self.power_signal.wait()).await {
+                Either3::First(bytes) => {
+                    writer
+                        .write_all(&tx_buf[..bytes])
+                        .await
+                        .map_err(|_| Error::Serial)?;
+                    writer.flush().await;
+
+                }
+                Either3::Second(result) => {
+                    let bytes = result.map_err(|_| Error::Serial)?;
+
+                    match from_utf8(&rx_buf[..bytes]).map_err(|_| "Not UTF-8") {
+                        Ok(line) => log::debug!(
+                            "BYTES READ {:?}",
+                            line
+                        ),
+                        Err(err) => log::debug!(
+                            "READ INVALID {:?}",
+                            &rx_buf[..bytes]
+                        ),
+                    }
+
+                    self.rx.write_all(&rx_buf[..bytes]).await;
+                    self.rx.flush().await;
+                }
+                Either3::Third(result) => {
+                    self.power_state = result;
+                    if !self.power_state {
+                        break Ok(());
+                    }
+                }
+            }
+        }
+    }
+
+    pub async fn low_power_pump(&mut self) {
+        self.power_state = self.power_signal.wait().await;
+    }
 }
 
 impl<'context, RW: 'static + BuildIo> Pump for RawIoPump<'context, RW> {
@@ -194,40 +248,13 @@ impl<'context, RW: 'static + BuildIo> Pump for RawIoPump<'context, RW> {
 
     fn pump(&mut self) -> Self::Fut<'_> {
         async {
-            let mut io = self.io.build();
-            let (mut reader, mut writer) = io.split();
-            loop {
-                let mut tx_buf = [0u8; 256];
-                let mut rx_buf = [0u8; 256];
-
-                match select(self.tx.read(&mut tx_buf), reader.read(&mut rx_buf)).await {
-                    Either::First(bytes) => {
-                        writer
-                            .write_all(&tx_buf[..bytes])
-                            .await
-                            .map_err(|_| Error::Serial)?;
-    	                writer.flush().await;
-
-                    }
-                    Either::Second(result) => {
-                        let bytes = result.map_err(|_| Error::Serial)?;
-
-                        match from_utf8(&rx_buf[..bytes]).map_err(|_| "Not UTF-8") {
-                            Ok(line) => log::debug!(
-                                "BYTES READ {:?}",
-                                line
-                            ),
-                            Err(err) => log::debug!(
-                                "READ INVALID {:?}",
-                                &rx_buf[..bytes]
-                            ),
-                        }
-
-                        self.rx.write_all(&rx_buf[..bytes]).await;
-                        self.rx.flush().await;
-                    }
-                }
+            if self.power_state {
+                self.high_power_pump().await?;
+            } else {
+                self.low_power_pump().await;
             }
+
+            Ok(())
         }
     }
 }

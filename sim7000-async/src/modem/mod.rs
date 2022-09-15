@@ -48,6 +48,8 @@ impl<'c, P: ModemPower> Modem<'c, P> {
             io,
             rx: context.rx_pipe.writer(),
             tx: context.tx_pipe.reader(),
+            power_state: false,
+            power_signal: &context.power_signal,
         };
 
         let rx_pump = RxPump {
@@ -70,7 +72,8 @@ impl<'c, P: ModemPower> Modem<'c, P> {
     }
 
     pub async fn init(&mut self) -> Result<(), Error> {
-        self.power.disable().await;
+        self.deactivate().await;
+        self.context.power_signal.signal(true);
         self.power.enable().await;
 
         let commands = self.commands.lock().await;
@@ -131,11 +134,13 @@ impl<'c, P: ModemPower> Modem<'c, P> {
         }
         commands.run(configure_edrx).await?;
 
-        self.power.disable().await;
+        core::mem::drop(commands);
+        self.deactivate().await;
         Ok(())
     }
 
     pub async fn activate(&mut self) -> Result<(), Error> {
+        self.context.power_signal.signal(true);
         self.power.enable().await;
         let set_flow_control = ifc::SetFlowControl {
             dce_by_dte: FlowControl::Hardware,
@@ -168,7 +173,9 @@ impl<'c, P: ModemPower> Modem<'c, P> {
     }
 
     pub async fn deactivate(&mut self) {
-        // TODO: we probably need to do more work here, this is a temporary implementation
+        self.context.power_signal.signal(false);
+        self.context.tcp.disconnect_all().await;
+        
         self.power.disable().await;
     }
 
