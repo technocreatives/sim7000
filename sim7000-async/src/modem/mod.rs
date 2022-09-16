@@ -177,11 +177,11 @@ impl<'c, P: ModemPower> Modem<'c, P> {
     }
 
     pub async fn deactivate(&mut self) {
-        let publisher = self.context.power_signal.publisher().unwrap();
-        publisher.publish(false).await;
+        self.power.disable().await;
         self.context.tcp.disconnect_all().await;
         
-        self.power.disable().await;
+        let publisher = self.context.power_signal.publisher().unwrap();
+        publisher.publish(false).await;
     }
 
     async fn wait_for_registration(&self, commands: &CommandRunnerGuard<'_>) -> Result<(), Error> {
