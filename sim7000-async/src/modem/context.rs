@@ -1,5 +1,5 @@
 use embassy_sync::{
-    blocking_mutex::raw::CriticalSectionRawMutex, channel::Channel, mutex::Mutex, signal::Signal, pipe::Pipe,
+    blocking_mutex::raw::CriticalSectionRawMutex, channel::Channel, mutex::Mutex, signal::Signal, pipe::Pipe, pubsub::PubSubChannel,
 };
 use heapless::Vec;
 
@@ -24,7 +24,7 @@ pub struct ModemContext {
     pub(crate) registration_events: Signal<RegistrationStatus>,
     pub(crate) gnss_slot: Slot<Signal<GnssReport>>,
     pub(crate) voltage_slot: Slot<Signal<VoltageWarning>>,
-    pub(crate) power_signal: Signal<bool>,
+    pub(crate) power_signal: PubSubChannel<CriticalSectionRawMutex, bool, 4, 2, 1>,
     pub(crate) tx_pipe: Pipe<CriticalSectionRawMutex, 2048>,
     pub(crate) rx_pipe: Pipe<CriticalSectionRawMutex, 2048>,
 }
@@ -40,7 +40,7 @@ impl ModemContext {
             registration_events: Signal::new(),
             gnss_slot: Slot::new(Signal::new()),
             voltage_slot: Slot::new(Signal::new()),
-            power_signal: Signal::new(),
+            power_signal: PubSubChannel::new(),
             tx_pipe: Pipe::new(),
             rx_pipe: Pipe::new(),
         }

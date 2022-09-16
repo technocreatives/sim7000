@@ -49,7 +49,7 @@ impl<'c, P: ModemPower> Modem<'c, P> {
             rx: context.rx_pipe.writer(),
             tx: context.tx_pipe.reader(),
             power_state: false,
-            power_signal: &context.power_signal,
+            power_signal: context.power_signal.dyn_subscriber().unwrap(),
         };
 
         let rx_pump = RxPump {
@@ -66,14 +66,15 @@ impl<'c, P: ModemPower> Modem<'c, P> {
             commands: context.commands.receiver(),
         };
 
-        let drop_pump = DropPump { context };
+        let drop_pump = DropPump { context, power_signal: context.power_signal.dyn_subscriber().unwrap(), power_state: false };
 
         Ok((modem, io_pump, tx_pump, rx_pump, drop_pump))
     }
 
     pub async fn init(&mut self) -> Result<(), Error> {
         self.deactivate().await;
-        self.context.power_signal.signal(true);
+        let publisher = self.context.power_signal.publisher().unwrap();
+        publisher.publish(true).await;
         self.power.enable().await;
 
         let commands = self.commands.lock().await;
@@ -135,12 +136,15 @@ impl<'c, P: ModemPower> Modem<'c, P> {
         commands.run(configure_edrx).await?;
 
         core::mem::drop(commands);
+        core::mem::drop(publisher);
         self.deactivate().await;
         Ok(())
     }
 
     pub async fn activate(&mut self) -> Result<(), Error> {
-        self.context.power_signal.signal(true);
+        // unwrap is fine here since the modem is the only code creating publishers, there will always be a free slot.
+        let publisher = self.context.power_signal.publisher().unwrap();
+        publisher.publish(true).await;
         self.power.enable().await;
         let set_flow_control = ifc::SetFlowControl {
             dce_by_dte: FlowControl::Hardware,
@@ -173,7 +177,8 @@ impl<'c, P: ModemPower> Modem<'c, P> {
     }
 
     pub async fn deactivate(&mut self) {
-        self.context.power_signal.signal(false);
+        let publisher = self.context.power_signal.publisher().unwrap();
+        publisher.publish(false).await;
         self.context.tcp.disconnect_all().await;
         
         self.power.disable().await;

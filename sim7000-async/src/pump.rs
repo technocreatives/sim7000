@@ -5,7 +5,7 @@ use embassy_sync::{
     blocking_mutex::raw::CriticalSectionRawMutex,
     channel::{Receiver, Sender},
     pipe::{Reader, Writer},
-    signal::Signal,
+    signal::Signal, pubsub::{Subscriber, DynSubscriber},
 };
 use embassy_time::{with_timeout, Duration};
 use embedded_io::asynch::{Read, Write};
@@ -158,6 +158,8 @@ impl<'context> Pump for TxPump<'context> {
 
 pub struct DropPump<'context> {
     pub(crate) context: &'context ModemContext,
+    pub(crate) power_signal: DynSubscriber<'context, bool>,
+    pub(crate) power_state: bool,
 }
 
 impl<'context> Pump for DropPump<'context> {
@@ -168,12 +170,20 @@ impl<'context> Pump for DropPump<'context> {
 
     fn pump(&mut self) -> Self::Fut<'_> {
         async {
-            let drop_message = self.context.drop_channel.recv().await;
-            let runner = self.context.commands();
-            let mut runner = runner.lock().await;
-            drop_message.run(&mut runner).await?;
-            drop(runner);
-            drop_message.clean_up(self.context);
+            match select(self.context.drop_channel.recv(), self.power_signal.next_message_pure()).await {
+                Either::First(drop_message) => {
+                    if self.power_state {
+                        let runner = self.context.commands();
+                        let mut runner = runner.lock().await;
+                        drop_message.run(&mut runner).await?;
+                        drop(runner);
+                        drop_message.clean_up(self.context);
+                    }
+                },
+                Either::Second(power_state) => {
+                    self.power_state = power_state;
+                },
+            }            
 
             Ok(())
         }
@@ -186,7 +196,7 @@ pub struct RawIoPump<'context, RW> {
     pub(crate) rx: Writer<'context, CriticalSectionRawMutex, 2048>,
     // reads data from the tx pump
     pub(crate) tx: Reader<'context, CriticalSectionRawMutex, 2048>,
-    pub(crate) power_signal: &'context Signal<bool>,
+    pub(crate) power_signal: DynSubscriber<'context, bool>,
     pub(crate) power_state: bool,
 }
 
@@ -199,7 +209,7 @@ impl<'context, RW: 'static + BuildIo> RawIoPump<'context, RW> {
             let mut tx_buf = [0u8; 256];
             let mut rx_buf = [0u8; 256];
 
-            match select3(self.tx.read(&mut tx_buf), reader.read(&mut rx_buf), self.power_signal.wait()).await {
+            match select3(self.tx.read(&mut tx_buf), reader.read(&mut rx_buf), self.power_signal.next_message_pure()).await {
                 Either3::First(bytes) => {
                     writer
                         .write_all(&tx_buf[..bytes])
@@ -236,7 +246,7 @@ impl<'context, RW: 'static + BuildIo> RawIoPump<'context, RW> {
     }
 
     pub async fn low_power_pump(&mut self) {
-        self.power_state = self.power_signal.wait().await;
+        self.power_state = self.power_signal.next_message_pure().await;
     }
 }
 
