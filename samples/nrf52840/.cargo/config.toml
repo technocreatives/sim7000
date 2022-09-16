@@ -1,0 +1,18 @@
+[alias]
+build-arm = "build --target=thumbv7em-none-eabihf"
+run-arm = "run --target=thumbv7em-none-eabihf"
+xtask = "run --target=x86_64-unknown-linux-gnu --manifest-path=./xtask/Cargo.toml --"
+
+[target.thumbv7em-none-eabihf]
+#runner = 'arm-none-eabi-gdb'
+#runner = 'gdb-multiarch'
+runner = 'probe-run --chip nRF52840_xxAA'
+rustflags = [
+    "-C", "link-arg=-Tlink.x",
+    "-C", "link-arg=--nmagic",
+    "-C", "link-arg=-Tdefmt.x",
+]
+
+[build]
+target = "thumbv7em-none-eabihf"
+
