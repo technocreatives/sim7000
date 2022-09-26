@@ -1,15 +1,18 @@
+use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::signal::Signal;
 
 use crate::at_command::unsolicited::VoltageWarning;
 use crate::slot::Slot;
 
 pub struct VoltageWarner<'c> {
-    pub(crate) signal: &'c Signal<VoltageWarning>,
-    pub(crate) slot: &'c Slot<Signal<VoltageWarning>>,
+    pub(crate) signal: &'c Signal<CriticalSectionRawMutex, VoltageWarning>,
+    pub(crate) slot: &'c Slot<Signal<CriticalSectionRawMutex, VoltageWarning>>,
 }
 
 impl<'c> VoltageWarner<'c> {
-    pub(crate) fn take(slot: &'c Slot<Signal<VoltageWarning>>) -> Option<Self> {
+    pub(crate) fn take(
+        slot: &'c Slot<Signal<CriticalSectionRawMutex, VoltageWarning>>,
+    ) -> Option<Self> {
         let signal = slot.claim()?;
         signal.reset();
         Some(VoltageWarner { signal, slot })

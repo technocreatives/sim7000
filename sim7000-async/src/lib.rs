@@ -1,5 +1,4 @@
 #![no_std]
-#![feature(generic_associated_types)]
 #![feature(type_alias_impl_trait)]
 
 // TODO: at_command should probably be moved to its own crate
@@ -33,15 +32,18 @@ pub trait SerialError {
 
 pub trait BuildIo {
     type IO<'d>: SplitIo
-    where Self: 'd;
+    where
+        Self: 'd;
     fn build<'d>(&'d mut self) -> Self::IO<'d>;
 }
 
 pub trait SplitIo {
     type Reader<'u>: Read
-    where Self: 'u;
+    where
+        Self: 'u;
     type Writer<'u>: Write
-    where Self: 'u;
+    where
+        Self: 'u;
 
     fn split<'u>(&'u mut self) -> (Self::Reader<'u>, Self::Writer<'u>);
 }

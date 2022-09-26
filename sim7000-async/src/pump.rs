@@ -1,11 +1,12 @@
-use crate::{BuildIo, SerialError, SplitIo};
+use crate::{BuildIo, SplitIo};
 use core::{future::Future, str::from_utf8};
-use embassy_futures::select::{select, Either, select3, Either3};
+use embassy_futures::select::{select, select3, Either, Either3};
 use embassy_sync::{
     blocking_mutex::raw::CriticalSectionRawMutex,
     channel::{Receiver, Sender},
     pipe::{Reader, Writer},
-    signal::Signal, pubsub::{Subscriber, DynSubscriber},
+    pubsub::DynSubscriber,
+    signal::Signal,
 };
 use embassy_time::{with_timeout, Duration};
 use embedded_io::asynch::{Read, Write};
@@ -36,9 +37,9 @@ pub struct RxPump<'context> {
     pub(crate) reader: ModemReader<'context>,
     pub(crate) generic_response: Sender<'context, CriticalSectionRawMutex, ResponseCode, 1>,
     pub(crate) tcp: &'context TcpContext,
-    pub(crate) gnss: &'context Signal<GnssReport>,
-    pub(crate) voltage_warning: &'context Signal<VoltageWarning>,
-    pub(crate) registration_events: &'context Signal<RegistrationStatus>,
+    pub(crate) gnss: &'context Signal<CriticalSectionRawMutex, GnssReport>,
+    pub(crate) voltage_warning: &'context Signal<CriticalSectionRawMutex, VoltageWarning>,
+    pub(crate) registration_events: &'context Signal<CriticalSectionRawMutex, RegistrationStatus>,
 }
 
 impl<'context> Pump for RxPump<'context> {
@@ -170,7 +171,12 @@ impl<'context> Pump for DropPump<'context> {
 
     fn pump(&mut self) -> Self::Fut<'_> {
         async {
-            match select(self.context.drop_channel.recv(), self.power_signal.next_message_pure()).await {
+            match select(
+                self.context.drop_channel.recv(),
+                self.power_signal.next_message_pure(),
+            )
+            .await
+            {
                 Either::First(drop_message) => {
                     if self.power_state {
                         let runner = self.context.commands();
@@ -179,11 +185,11 @@ impl<'context> Pump for DropPump<'context> {
                         drop(runner);
                         drop_message.clean_up(self.context);
                     }
-                },
+                }
                 Either::Second(power_state) => {
                     self.power_state = power_state;
-                },
-            }            
+                }
+            }
 
             Ok(())
         }
@@ -192,9 +198,9 @@ impl<'context> Pump for DropPump<'context> {
 
 pub struct RawIoPump<'context, RW> {
     pub(crate) io: RW,
-    // sends data to the rx pump
+    /// sends data to the rx pump
     pub(crate) rx: Writer<'context, CriticalSectionRawMutex, 2048>,
-    // reads data from the tx pump
+    /// reads data from the tx pump
     pub(crate) tx: Reader<'context, CriticalSectionRawMutex, 2048>,
     pub(crate) power_signal: DynSubscriber<'context, bool>,
     pub(crate) power_state: bool,
@@ -204,36 +210,35 @@ impl<'context, RW: 'static + BuildIo> RawIoPump<'context, RW> {
     pub async fn high_power_pump(&mut self) -> Result<(), Error> {
         let mut io = self.io.build();
         let (mut reader, mut writer) = io.split();
-        
+
         loop {
             let mut tx_buf = [0u8; 256];
             let mut rx_buf = [0u8; 256];
 
-            match select3(self.tx.read(&mut tx_buf), reader.read(&mut rx_buf), self.power_signal.next_message_pure()).await {
+            match select3(
+                self.tx.read(&mut tx_buf),
+                reader.read(&mut rx_buf),
+                self.power_signal.next_message_pure(),
+            )
+            .await
+            {
                 Either3::First(bytes) => {
                     writer
                         .write_all(&tx_buf[..bytes])
                         .await
                         .map_err(|_| Error::Serial)?;
-                    writer.flush().await;
-
+                    writer.flush().await.map_err(|_| Error::Serial)?;
                 }
                 Either3::Second(result) => {
                     let bytes = result.map_err(|_| Error::Serial)?;
 
-                    match from_utf8(&rx_buf[..bytes]).map_err(|_| "Not UTF-8") {
-                        Ok(line) => log::debug!(
-                            "BYTES READ {:?}",
-                            line
-                        ),
-                        Err(err) => log::debug!(
-                            "READ INVALID {:?}",
-                            &rx_buf[..bytes]
-                        ),
+                    match from_utf8(&rx_buf[..bytes]) {
+                        Ok(line) => log::debug!("BYTES READ {:?}", line),
+                        Err(_) => log::debug!("READ INVALID {:?}", &rx_buf[..bytes]),
                     }
 
-                    self.rx.write_all(&rx_buf[..bytes]).await;
-                    self.rx.flush().await;
+                    self.rx.write_all(&rx_buf[..bytes]).await.ok(/* infallible */);
+                    self.rx.flush().await.ok(/* infallible */);
                 }
                 Either3::Third(result) => {
                     self.power_state = result;
@@ -270,7 +275,7 @@ impl<'context, RW: 'static + BuildIo> Pump for RawIoPump<'context, RW> {
 }
 
 pub struct RegistrationHandler<'context> {
-    context: &'context Signal<RegistrationStatus>,
+    context: &'context Signal<CriticalSectionRawMutex, RegistrationStatus>,
 }
 
 impl<'context> RegistrationHandler<'context> {

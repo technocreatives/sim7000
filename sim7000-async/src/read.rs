@@ -1,10 +1,9 @@
-use core::future::Future;
 use core::str::from_utf8;
-use embassy_sync::{pipe::Reader, blocking_mutex::raw::CriticalSectionRawMutex};
+use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, pipe::Reader};
 use embedded_io::asynch::Read;
 use heapless::{String, Vec};
 
-use crate::{log, Error, SerialError};
+use crate::{log, Error};
 
 pub struct ModemReader<'context> {
     read: Reader<'context, CriticalSectionRawMutex, 2048>,
@@ -24,16 +23,9 @@ impl<'context> ModemReader<'context> {
         const CRLF: &str = "\r\n";
         loop {
             if !self.buffer.is_empty() {
-
-                match from_utf8(&self.buffer).map_err(|_| "Not UTF-8") {
-                    Ok(line) => log::debug!(
-                        "CURRENT BUFFER {:?}",
-                        line
-                    ),
-                    Err(err) => log::debug!(
-                        "INVALID UTF-8 {:?}",
-                        self.buffer.as_slice()
-                    ),
+                match from_utf8(&self.buffer) {
+                    Ok(line) => log::debug!("CURRENT BUFFER {:?}", line),
+                    Err(_) => log::debug!("INVALID UTF-8 {:?}", self.buffer.as_slice()),
                 }
             }
 
@@ -56,7 +48,8 @@ impl<'context> ModemReader<'context> {
                 // If we see a line break, the modem has probaly sent us a message
 
                 let line_end = position + CRLF.len();
-                let line = match from_utf8(&self.buffer[..position]).map_err(|_| Error::InvalidUtf8) {
+                let line = match from_utf8(&self.buffer[..position]).map_err(|_| Error::InvalidUtf8)
+                {
                     Ok(line) => line,
                     Err(err) => {
                         self.buffer.rotate_left(line_end);
@@ -89,10 +82,12 @@ impl<'context> ModemReader<'context> {
             }
 
             let mut buf = [0u8; 256];
-            let amount = Read::read(&mut self
-                .read, &mut buf[..self.buffer.capacity() - self.buffer.len()])
-                .await
-                .map_err(|_| Error::Serial)?;
+            let amount = Read::read(
+                &mut self.read,
+                &mut buf[..self.buffer.capacity() - self.buffer.len()],
+            )
+            .await
+            .map_err(|_| Error::Serial)?;
 
             self.buffer
                 .extend_from_slice(&buf[..amount])

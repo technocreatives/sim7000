@@ -1,5 +1,6 @@
 use embassy_sync::{
-    blocking_mutex::raw::CriticalSectionRawMutex, channel::Channel, mutex::Mutex, signal::Signal, pipe::Pipe, pubsub::PubSubChannel,
+    blocking_mutex::raw::CriticalSectionRawMutex, channel::Channel, mutex::Mutex, pipe::Pipe,
+    pubsub::PubSubChannel, signal::Signal,
 };
 use heapless::Vec;
 
@@ -21,9 +22,9 @@ pub struct ModemContext {
     pub(crate) generic_response: Channel<CriticalSectionRawMutex, ResponseCode, 1>,
     pub(crate) drop_channel: DropChannel,
     pub(crate) tcp: TcpContext,
-    pub(crate) registration_events: Signal<RegistrationStatus>,
-    pub(crate) gnss_slot: Slot<Signal<GnssReport>>,
-    pub(crate) voltage_slot: Slot<Signal<VoltageWarning>>,
+    pub(crate) registration_events: Signal<CriticalSectionRawMutex, RegistrationStatus>,
+    pub(crate) gnss_slot: Slot<Signal<CriticalSectionRawMutex, GnssReport>>,
+    pub(crate) voltage_slot: Slot<Signal<CriticalSectionRawMutex, VoltageWarning>>,
     pub(crate) power_signal: PubSubChannel<CriticalSectionRawMutex, bool, 4, 2, 1>,
     pub(crate) tx_pipe: Pipe<CriticalSectionRawMutex, 2048>,
     pub(crate) rx_pipe: Pipe<CriticalSectionRawMutex, 2048>,

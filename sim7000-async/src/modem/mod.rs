@@ -12,11 +12,11 @@ use crate::{
     },
     drop::{AsyncDrop, DropMessage},
     gnss::Gnss,
-    pump::{DropPump, RxPump, TxPump, RawIoPump},
-    read::{ModemReader},
+    pump::{DropPump, RawIoPump, RxPump, TxPump},
+    read::ModemReader,
     tcp::TcpStream,
     voltage::VoltageWarner,
-    Error, ModemPower, BuildIo,
+    BuildIo, Error, ModemPower,
 };
 pub use command::{CommandRunner, CommandRunnerGuard, RawAtCommand};
 pub use context::*;
@@ -37,7 +37,16 @@ impl<'c, P: ModemPower> Modem<'c, P> {
         io: I,
         power: P,
         context: &'c ModemContext,
-    ) -> Result<(Modem<'c, P>, RawIoPump<'c, I>, TxPump<'c>, RxPump<'c>, DropPump<'c>), Error> {
+    ) -> Result<
+        (
+            Modem<'c, P>,
+            RawIoPump<'c, I>,
+            TxPump<'c>,
+            RxPump<'c>,
+            DropPump<'c>,
+        ),
+        Error,
+    > {
         let modem = Modem {
             commands: context.commands(),
             context,
@@ -66,7 +75,11 @@ impl<'c, P: ModemPower> Modem<'c, P> {
             commands: context.commands.receiver(),
         };
 
-        let drop_pump = DropPump { context, power_signal: context.power_signal.dyn_subscriber().unwrap(), power_state: false };
+        let drop_pump = DropPump {
+            context,
+            power_signal: context.power_signal.dyn_subscriber().unwrap(),
+            power_state: false,
+        };
 
         Ok((modem, io_pump, tx_pump, rx_pump, drop_pump))
     }
@@ -180,7 +193,7 @@ impl<'c, P: ModemPower> Modem<'c, P> {
         let publisher = self.context.power_signal.publisher().unwrap();
         publisher.publish(false).await;
         self.context.tcp.disconnect_all().await;
-        
+
         self.power.disable().await;
     }
 

@@ -1,5 +1,8 @@
 use core::future::Future;
-use embedded_io::{asynch::{Write, Read}, Io};
+use embedded_io::{
+    asynch::{Read, Write},
+    Io,
+};
 use futures_util::future::Either;
 use heapless::Vec;
 
@@ -121,25 +124,6 @@ impl<'s> TcpStream<'s> {
             let read_len = self.buffer.len();
             self.buffer.clear();
             Ok(read_len)
-        }
-    }
-
-    async fn inner_read_exact<'a>(&'a mut self, mut buf: &'a mut [u8]) -> Result<(), TcpError> {
-        while !buf.is_empty() {
-            match self.inner_read(buf).await {
-                Ok(0) => break,
-                Ok(n) => {
-                    let tmp = buf;
-                    buf = &mut tmp[n..];
-                }
-                Err(e) => return Err(e),
-            }
-        }
-
-        if !buf.is_empty() {
-            Err(TcpError::Closed)
-        } else {
-            Ok(())
         }
     }
 }
