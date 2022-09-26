@@ -34,7 +34,7 @@ pub trait BuildIo {
     type IO<'d>: SplitIo
     where
         Self: 'd;
-    fn build<'d>(&'d mut self) -> Self::IO<'d>;
+    fn build(&mut self) -> Self::IO<'_>;
 }
 
 pub trait SplitIo {
@@ -45,7 +45,7 @@ pub trait SplitIo {
     where
         Self: 'u;
 
-    fn split<'u>(&'u mut self) -> (Self::Reader<'u>, Self::Writer<'u>);
+    fn split(&mut self) -> (Self::Reader<'_>, Self::Writer<'_>);
 }
 
 #[derive(Debug)]
