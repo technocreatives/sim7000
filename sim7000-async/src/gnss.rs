@@ -1,3 +1,4 @@
+use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::signal::Signal;
 
 use crate::at_command::unsolicited::{GnssFix, GnssReport};
@@ -7,11 +8,14 @@ pub const GNSS_SLOTS: usize = 1;
 
 pub struct Gnss<'c> {
     pub(crate) _drop: AsyncDrop<'c>,
-    pub(crate) reports: &'c Signal<GnssReport>,
+    pub(crate) reports: &'c Signal<CriticalSectionRawMutex, GnssReport>,
 }
 
 impl<'c> Gnss<'c> {
-    pub fn new(reports: &'c Signal<GnssReport>, drop_channel: &'c DropChannel) -> Self {
+    pub fn new(
+        reports: &'c Signal<CriticalSectionRawMutex, GnssReport>,
+        drop_channel: &'c DropChannel,
+    ) -> Self {
         Gnss {
             _drop: AsyncDrop::new(drop_channel, DropMessage::Gnss),
             reports,
