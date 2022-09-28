@@ -1,7 +1,6 @@
 #![no_std]
 #![no_main]
 #![feature(type_alias_impl_trait)]
-#![feature(generic_associated_types)]
 
 mod example;
 
@@ -210,7 +209,7 @@ impl<'d> embedded_io::asynch::Read for AppUarteRead<'d> {
                 .await
             {
                 Ok(Ok(result)) => result,
-                Ok(Err(err)) => return Err(sim7000_async::Error::Serial),
+                Ok(Err(_err)) => return Err(sim7000_async::Error::Serial),
                 Err(_) => 0,
             };
 
