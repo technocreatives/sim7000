@@ -3,7 +3,6 @@
 use crate::Modem;
 use core::future::Future;
 use core::str::{from_utf8, Utf8Error};
-use cortex_m::prelude::_embedded_hal_blocking_i2c_Read;
 use embassy_executor::{SpawnError, Spawner};
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::channel::Channel;
