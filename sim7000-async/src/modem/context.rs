@@ -2,7 +2,6 @@ use embassy_sync::{
     blocking_mutex::raw::CriticalSectionRawMutex, channel::Channel, mutex::Mutex, pipe::Pipe,
     pubsub::PubSubChannel, signal::Signal,
 };
-use heapless::Vec;
 
 use super::{CommandRunner, RawAtCommand};
 use crate::at_command::{
@@ -13,7 +12,7 @@ use crate::drop::DropChannel;
 use crate::slot::Slot;
 use crate::tcp::CONNECTION_SLOTS;
 
-pub type TcpRxChannel = Channel<CriticalSectionRawMutex, Vec<u8, 365>, 8>;
+pub type TcpRxPipe = Pipe<CriticalSectionRawMutex, 3072>;
 pub type TcpEventChannel = Channel<CriticalSectionRawMutex, ConnectionMessage, 8>;
 
 pub struct ModemContext {
@@ -53,7 +52,7 @@ impl ModemContext {
 }
 
 pub struct TcpSlot {
-    pub rx: TcpRxChannel,
+    pub rx: TcpRxPipe,
     pub events: TcpEventChannel,
 }
 
@@ -64,7 +63,7 @@ pub struct TcpContext {
 impl TcpSlot {
     pub const fn new() -> Self {
         TcpSlot {
-            rx: Channel::new(),
+            rx: Pipe::new(),
             events: Channel::new(),
         }
     }
@@ -110,7 +109,7 @@ impl TcpContext {
 
 pub struct TcpToken<'c> {
     ordinal: usize,
-    rx: &'c TcpRxChannel,
+    rx: &'c TcpRxPipe,
     events: &'c TcpEventChannel,
 }
 
@@ -119,7 +118,7 @@ impl<'c> TcpToken<'c> {
         self.ordinal
     }
 
-    pub fn rx(&self) -> &'c TcpRxChannel {
+    pub fn rx(&self) -> &'c TcpRxPipe {
         self.rx
     }
 
