@@ -1,6 +1,6 @@
 use core::str::FromStr;
 
-use crate::at_command::{ATParseErr, ATParseLine};
+use crate::at_command::{AtParseErr, AtParseLine};
 use crate::util::collect_array;
 
 #[derive(Debug, PartialEq)]
@@ -28,8 +28,8 @@ pub struct GnssFix {
     pub signal_noise_ratio: u32,
 }
 
-impl ATParseLine for GnssReport {
-    fn from_line(line: &str) -> Result<Self, ATParseErr> {
+impl AtParseLine for GnssReport {
+    fn from_line(line: &str) -> Result<Self, AtParseErr> {
         let (message, rest) = line.split_once(": ").ok_or("Missing ': '")?;
 
         if message != "+UGNSINF" {

@@ -1,8 +1,7 @@
 use core::fmt::Write;
 use heapless::String;
 
-use super::ATRequest;
-use crate::at_command::response::GenericOk;
+use super::{AtRequest, GenericOk};
 
 /// AT+CIPSPRT=...
 #[repr(u8)]
@@ -18,7 +17,7 @@ pub enum SetCipSendPrompt {
     NoResponseNoPrompt = 2,
 }
 
-impl ATRequest for SetCipSendPrompt {
+impl AtRequest for SetCipSendPrompt {
     type Response = GenericOk;
     fn encode(&self) -> String<256> {
         let mut buf = String::new();

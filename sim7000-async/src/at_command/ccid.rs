@@ -1,6 +1,15 @@
-use crate::at_command::{ATParseErr, ATParseLine};
+use heapless::String;
 
-use super::{ATResponse, ResponseCode};
+use super::{AtParseErr, AtParseLine, AtRequest, AtResponse, GenericOk, ResponseCode};
+
+pub struct ShowIccid;
+
+impl AtRequest for ShowIccid {
+    type Response = (Iccid, GenericOk);
+    fn encode(&self) -> String<256> {
+        "AT+CCID\r".into()
+    }
+}
 
 #[derive(Debug)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
@@ -11,8 +20,8 @@ pub struct Iccid {
     // pub checksum: u8,
 }
 
-impl ATParseLine for Iccid {
-    fn from_line(line: &str) -> Result<Self, ATParseErr> {
+impl AtParseLine for Iccid {
+    fn from_line(line: &str) -> Result<Self, AtParseErr> {
         //  "89 88 28 0666001104843 8"
         //  "89 01 26 0862291477114 f"
         if line.len() != 20 {
@@ -38,7 +47,7 @@ impl ATParseLine for Iccid {
     }
 }
 
-impl ATResponse for Iccid {
+impl AtResponse for Iccid {
     fn from_generic(code: ResponseCode) -> Result<Self, ResponseCode> {
         match code {
             ResponseCode::Iccid(iccid) => Ok(iccid),

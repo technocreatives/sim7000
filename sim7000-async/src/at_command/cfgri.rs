@@ -1,8 +1,7 @@
 use core::fmt::Write;
 use heapless::String;
 
-use super::ATRequest;
-use crate::at_command::response::GenericOk;
+use super::{AtRequest, GenericOk};
 
 #[repr(u8)]
 #[derive(Clone, Copy)]
@@ -15,7 +14,7 @@ pub enum RiPinMode {
 /// AT+CFGRI=...
 pub struct ConfigureRiPin(pub RiPinMode);
 
-impl ATRequest for ConfigureRiPin {
+impl AtRequest for ConfigureRiPin {
     type Response = GenericOk;
     fn encode(&self) -> String<256> {
         let mut buf = String::new();

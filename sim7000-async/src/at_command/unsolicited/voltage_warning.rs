@@ -1,4 +1,4 @@
-use crate::at_command::{ATParseErr, ATParseLine};
+use crate::at_command::{AtParseErr, AtParseLine};
 
 /// Voltage is out of range for the Sim7000
 #[derive(Debug)]
@@ -8,8 +8,8 @@ pub enum VoltageWarning {
     UnderVoltage,
 }
 
-impl ATParseLine for VoltageWarning {
-    fn from_line(line: &str) -> Result<Self, ATParseErr> {
+impl AtParseLine for VoltageWarning {
+    fn from_line(line: &str) -> Result<Self, AtParseErr> {
         let (reason, message) = line.split_once(' ').ok_or("Missing ' '")?;
 
         // looks like a typo in the documentation

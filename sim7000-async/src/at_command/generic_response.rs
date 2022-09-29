@@ -1,14 +1,4 @@
-use super::{ATParseErr, ATParseLine};
-
-pub mod ccid;
-pub mod cifsrex;
-pub mod cpsi;
-pub mod csq;
-
-pub use ccid::Iccid;
-pub use cifsrex::IpExt;
-pub use cpsi::{OperationMode, SystemInfo, SystemMode};
-pub use csq::SignalQuality;
+use super::{AtParseErr, AtParseLine, AtResponse, ResponseCode};
 
 #[derive(Debug)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
@@ -37,12 +27,8 @@ pub struct CloseOk {
     pub connection: usize,
 }
 
-pub trait ATResponse: Sized {
-    fn from_generic(code: ResponseCode) -> Result<Self, ResponseCode>;
-}
-
-impl ATParseLine for GenericOk {
-    fn from_line(line: &str) -> Result<Self, ATParseErr> {
+impl AtParseLine for GenericOk {
+    fn from_line(line: &str) -> Result<Self, AtParseErr> {
         // TODO: SHUT OK should be seperate type
         (line == "OK" || line == "SHUT OK")
             .then(|| GenericOk)
@@ -50,7 +36,7 @@ impl ATParseLine for GenericOk {
     }
 }
 
-impl ATResponse for GenericOk {
+impl AtResponse for GenericOk {
     fn from_generic(code: ResponseCode) -> Result<Self, ResponseCode> {
         match code {
             ResponseCode::Ok(ok) => Ok(ok),
@@ -59,8 +45,8 @@ impl ATResponse for GenericOk {
     }
 }
 
-impl ATParseLine for SimError {
-    fn from_line(line: &str) -> Result<Self, ATParseErr> {
+impl AtParseLine for SimError {
+    fn from_line(line: &str) -> Result<Self, AtParseErr> {
         if let Some(code) = line.strip_prefix("+CME ERROR") {
             Ok(SimError::CmeErr {
                 code: code.parse()?,
@@ -77,15 +63,15 @@ impl ATParseLine for SimError {
     }
 }
 
-impl ATParseLine for WritePrompt {
-    fn from_line(line: &str) -> Result<Self, ATParseErr> {
+impl AtParseLine for WritePrompt {
+    fn from_line(line: &str) -> Result<Self, AtParseErr> {
         line.eq("> ")
             .then(|| WritePrompt)
             .ok_or_else(|| "Not '> '".into())
     }
 }
 
-impl ATResponse for WritePrompt {
+impl AtResponse for WritePrompt {
     fn from_generic(code: ResponseCode) -> Result<Self, ResponseCode> {
         match code {
             ResponseCode::WritePrompt(prompt) => Ok(prompt),
@@ -94,8 +80,8 @@ impl ATResponse for WritePrompt {
     }
 }
 
-impl ATParseLine for CloseOk {
-    fn from_line(line: &str) -> Result<Self, ATParseErr> {
+impl AtParseLine for CloseOk {
+    fn from_line(line: &str) -> Result<Self, AtParseErr> {
         let connection = line
             .strip_suffix(", CLOSE OK")
             .ok_or("Missing ', CLOSE OK'")?
@@ -105,48 +91,11 @@ impl ATParseLine for CloseOk {
     }
 }
 
-impl ATResponse for CloseOk {
+impl AtResponse for CloseOk {
     fn from_generic(code: ResponseCode) -> Result<Self, ResponseCode> {
         match code {
             ResponseCode::CloseOk(close_ok) => Ok(close_ok),
             _ => Err(code),
         }
-    }
-}
-
-/// Sim7000 AT-command response code
-#[derive(Debug)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
-pub enum ResponseCode {
-    Ok(GenericOk),
-    Error(SimError),
-    WritePrompt(WritePrompt), // "> "
-    CloseOk(CloseOk),
-    IpExt(IpExt),
-    Iccid(Iccid),
-    SignalQuality(SignalQuality),
-    SystemInfo(SystemInfo),
-}
-
-impl ATParseLine for ResponseCode {
-    fn from_line(line: &str) -> Result<Self, ATParseErr> {
-        /// Create a function that tries to parse the line into an Urc::T
-        fn parse<'a, T: ATParseLine>(
-            line: &'a str,
-            f: impl Fn(T) -> ResponseCode + 'a,
-        ) -> impl Fn(ATParseErr) -> Result<ResponseCode, ATParseErr> + 'a {
-            move |_| Ok(f(T::from_line(line)?))
-        }
-
-        Err(ATParseErr::default())
-            .or_else(parse(line, ResponseCode::Ok))
-            .or_else(parse(line, ResponseCode::Error))
-            .or_else(parse(line, ResponseCode::WritePrompt))
-            .or_else(parse(line, ResponseCode::CloseOk))
-            .or_else(parse(line, ResponseCode::IpExt))
-            .or_else(parse(line, ResponseCode::Iccid))
-            .or_else(parse(line, ResponseCode::SignalQuality))
-            .or_else(parse(line, ResponseCode::SystemInfo))
-            .map_err(|_| "Unknown response code".into())
     }
 }

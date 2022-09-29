@@ -1,8 +1,7 @@
 use core::fmt::Write;
 use heapless::String;
 
-use super::ATRequest;
-use crate::at_command::response::GenericOk;
+use super::{AtRequest, GenericOk};
 
 /// AT+CSTT=...
 pub struct StartTask {
@@ -11,7 +10,7 @@ pub struct StartTask {
     pub password: String<50>,
 }
 
-impl ATRequest for StartTask {
+impl AtRequest for StartTask {
     type Response = GenericOk;
     fn encode(&self) -> String<256> {
         let mut buf = String::new();

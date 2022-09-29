@@ -1,8 +1,7 @@
 use core::fmt::Write;
 use heapless::String;
 
-use super::ATRequest;
-use crate::at_command::response::GenericOk;
+use super::{AtRequest, GenericOk};
 
 pub enum ConnectMode {
     Tcp,
@@ -23,7 +22,7 @@ pub struct Connect {
     pub port: u16,
 }
 
-impl ATRequest for Connect {
+impl AtRequest for Connect {
     type Response = GenericOk; // TODO: should have its own type
     fn encode(&self) -> String<256> {
         let mode = match self.mode {

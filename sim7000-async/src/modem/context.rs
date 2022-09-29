@@ -6,8 +6,8 @@ use heapless::Vec;
 
 use super::{CommandRunner, RawAtCommand};
 use crate::at_command::{
-    response::ResponseCode,
     unsolicited::{ConnectionMessage, GnssReport, RegistrationStatus, VoltageWarning},
+    ResponseCode,
 };
 use crate::drop::DropChannel;
 use crate::slot::Slot;

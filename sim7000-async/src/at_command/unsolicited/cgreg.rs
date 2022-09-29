@@ -1,4 +1,4 @@
-use crate::at_command::{ATParseErr, ATParseLine};
+use crate::at_command::{AtParseErr, AtParseLine};
 
 /// Network registration status
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
@@ -12,8 +12,8 @@ pub enum RegistrationStatus {
     RegisteredRoaming,
 }
 
-impl ATParseLine for RegistrationStatus {
-    fn from_line(line: &str) -> Result<Self, ATParseErr> {
+impl AtParseLine for RegistrationStatus {
+    fn from_line(line: &str) -> Result<Self, AtParseErr> {
         let (message, rest) = line.split_once(": ").ok_or("Missing ': '")?;
         if message != "+CGREG" {
             return Err("Missing '+CGREG'".into());

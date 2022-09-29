@@ -1,7 +1,7 @@
 use core::mem::drop;
 use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, channel::Channel};
 
-use crate::at_command::request::{CloseConnection, SetGnssPower};
+use crate::at_command::{CloseConnection, SetGnssPower};
 use crate::gnss::GNSS_SLOTS;
 use crate::log;
 use crate::modem::{CommandRunnerGuard, ModemContext};

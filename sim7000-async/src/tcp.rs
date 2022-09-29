@@ -7,8 +7,7 @@ use futures_util::future::Either;
 use heapless::Vec;
 
 use crate::{
-    at_command::request::cipsend,
-    at_command::unsolicited::ConnectionMessage,
+    at_command::{cipsend, unsolicited::ConnectionMessage},
     drop::AsyncDrop,
     log,
     modem::{CommandRunner, TcpToken},
