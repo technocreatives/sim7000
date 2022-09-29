@@ -25,6 +25,7 @@ pub mod cipstart;
 pub mod cmee;
 pub mod cmnb;
 pub mod cnmp;
+pub mod cops;
 pub mod cpsi;
 pub mod csclk;
 pub mod csq;
@@ -52,6 +53,7 @@ pub use cipstart::{Connect, ConnectMode};
 pub use cmee::{CMEErrorMode, ConfigureCMEErrors};
 pub use cmnb::{NbMode, SetNbMode};
 pub use cnmp::{NetworkMode, SetNetworkMode};
+pub use cops::{GetOperatorInfo, OperatorFormat, OperatorInfo, OperatorMode};
 pub use cpsi::{GetSystemInfo, SystemInfo, SystemMode};
 pub use csclk::SetSlowClock;
 pub use csq::{GetSignalQuality, SignalQuality};
@@ -90,6 +92,7 @@ pub enum ResponseCode {
     Iccid(Iccid),
     SignalQuality(SignalQuality),
     SystemInfo(SystemInfo),
+    OperatorInfo(OperatorInfo),
 }
 
 impl AtParseLine for ResponseCode {
@@ -111,6 +114,7 @@ impl AtParseLine for ResponseCode {
             .or_else(parse(line, ResponseCode::Iccid))
             .or_else(parse(line, ResponseCode::SignalQuality))
             .or_else(parse(line, ResponseCode::SystemInfo))
+            .or_else(parse(line, ResponseCode::OperatorInfo))
             .map_err(|_| "Unknown response code".into())
     }
 }
