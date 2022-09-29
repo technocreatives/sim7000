@@ -6,7 +6,7 @@ use heapless::Vec;
 
 use crate::{
     at_command::{
-        ate, cbatchk,
+        ate, cbatchk, ccid,
         cedrxs::{self, AcTType, EDRXSetting},
         cfgri::{self, RiPinMode},
         cgnspwr, cgnsurc, cgreg, cifsrex, ciicr, cipmux, cipshut, cipstart,
@@ -16,7 +16,7 @@ use crate::{
         ifc::{self, FlowControl},
         ipr::{self, BaudRate},
         unsolicited::{ConnectionMessage, RegistrationStatus},
-        At, ConnectMode, NetworkMode,
+        At, AtRequest, ConnectMode, NetworkMode,
     },
     drop::{AsyncDrop, DropMessage},
     gnss::Gnss,
@@ -28,6 +28,8 @@ use crate::{
 };
 pub use command::{CommandRunner, CommandRunnerGuard, RawAtCommand};
 pub use context::*;
+
+use self::command::ExpectResponse;
 
 pub struct Uninitialized;
 pub struct Disabled;
@@ -305,27 +307,35 @@ impl<'c, P: ModemPower> Modem<'c, P> {
         VoltageWarner::take(&self.context.voltage_slot)
     }
 
+    /// Run a single AT command on the modem. Use with care.
+    pub async fn run_command<C, Response>(&self, command: C) -> Result<Response, Error>
+    where
+        C: AtRequest<Response = Response>,
+        Response: ExpectResponse,
+    {
+        self.commands.lock().await.run(command).await
+    }
+
     pub async fn query_system_info(&mut self) -> Result<cpsi::SystemInfo, Error> {
         let (info, _) = self.commands.lock().await.run(cpsi::GetSystemInfo).await?;
         Ok(info)
     }
 
     pub async fn query_signal(&mut self) -> Result<csq::SignalQuality, Error> {
-        let (signal, _) = self
-            .commands
-            .lock()
+        self.run_command(csq::GetSignalQuality)
             .await
-            .run(csq::GetSignalQuality)
-            .await?;
-        Ok(signal)
+            .map(|(response, _)| response)
     }
 
     pub async fn query_operator_info(&mut self) -> Result<cops::OperatorInfo, Error> {
-        self.commands
-            .lock()
+        self.run_command(cops::GetOperatorInfo)
             .await
-            .run(cops::GetOperatorInfo)
+            .map(|(response, _)| response)
+    }
+
+    pub async fn query_iccid(&mut self) -> Result<ccid::Iccid, Error> {
+        self.run_command(ccid::ShowIccid)
             .await
-            .map(|(info, _)| info)
+            .map(|(response, _)| response)
     }
 }
