@@ -12,7 +12,7 @@ use crate::{
         cgnspwr, cgnsurc, cgreg, cifsrex, ciicr, cipmux, cipshut, cipstart,
         cmee::{self, CMEErrorMode},
         cmnb::{self, NbMode},
-        cnmp, cpsi, csclk, csq, cstt,
+        cnmp, cops, cpsi, csclk, csq, cstt,
         ifc::{self, FlowControl},
         ipr::{self, BaudRate},
         unsolicited::{ConnectionMessage, RegistrationStatus},
@@ -318,5 +318,14 @@ impl<'c, P: ModemPower> Modem<'c, P> {
             .run(csq::GetSignalQuality)
             .await?;
         Ok(signal)
+    }
+
+    pub async fn query_operator_info(&mut self) -> Result<cops::OperatorInfo, Error> {
+        self.commands
+            .lock()
+            .await
+            .run(cops::GetOperatorInfo)
+            .await
+            .map(|(info, _)| info)
     }
 }
