@@ -91,10 +91,8 @@ async fn main(spawner: Spawner) {
     defmt::info!("sleeping 5s");
     Timer::after(Duration::from_millis(5000)).await;
 
-    if let Ok(info) = modem.query_operator_info().await {
-        defmt::info!("Operator: {:?}", info);
-    }
-
+    defmt::info!("Operator: {:?}", modem.query_operator_info().await);
+    defmt::info!("ICCID: {:?}", modem.query_iccid().await);
     defmt::info!("Signal quality: {:?}", modem.query_signal().await);
     defmt::info!("System info: {:?}", modem.query_system_info().await);
 
