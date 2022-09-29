@@ -1,4 +1,4 @@
-use crate::at_command::{stub_parser_prefix, ATParseErr, ATParseLine};
+use crate::at_command::{stub_parser_prefix, AtParseErr, AtParseLine};
 
 // stub type
 /// Network time zone
@@ -6,8 +6,8 @@ use crate::at_command::{stub_parser_prefix, ATParseErr, ATParseLine};
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct Ctzv;
 
-impl ATParseLine for Ctzv {
-    fn from_line(line: &str) -> Result<Self, ATParseErr> {
+impl AtParseLine for Ctzv {
+    fn from_line(line: &str) -> Result<Self, AtParseErr> {
         stub_parser_prefix(line, "+CTZV:", Ctzv)
     }
 }

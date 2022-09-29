@@ -1,6 +1,6 @@
 //! Unsolicited Response Codes
 
-use super::{ATParseErr, ATParseLine};
+use super::{AtParseErr, AtParseLine};
 
 mod app_pdp;
 mod cfun;
@@ -69,17 +69,17 @@ pub enum Urc {
     VoltageWarning(VoltageWarning),
 }
 
-impl ATParseLine for Urc {
-    fn from_line(line: &str) -> Result<Self, ATParseErr> {
+impl AtParseLine for Urc {
+    fn from_line(line: &str) -> Result<Self, AtParseErr> {
         /// Create a function that tries to parse the line into an Urc::T
-        fn parse<'a, T: ATParseLine>(
+        fn parse<'a, T: AtParseLine>(
             line: &'a str,
             f: impl Fn(T) -> Urc + 'a,
-        ) -> impl Fn(ATParseErr) -> Result<Urc, ATParseErr> + 'a {
+        ) -> impl Fn(AtParseErr) -> Result<Urc, AtParseErr> + 'a {
             move |_| Ok(f(T::from_line(line)?))
         }
 
-        Err(ATParseErr::default())
+        Err(AtParseErr::default())
             .or_else(parse(line, Urc::AppNetworkActive))
             .or_else(parse(line, Urc::CFun))
             .or_else(parse(line, Urc::CPin))
@@ -99,7 +99,7 @@ impl ATParseLine for Urc {
             .or_else(parse(line, Urc::ReceiveHeader))
             .or_else(parse(line, Urc::RegistrationStatus))
             .or_else(parse(line, Urc::VoltageWarning))
-            .map_err(|_| ATParseErr::from("Failed to parse as a URC"))
+            .map_err(|_| AtParseErr::from("Failed to parse as a URC"))
     }
 }
 

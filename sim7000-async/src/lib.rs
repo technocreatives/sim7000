@@ -23,7 +23,7 @@ use embedded_io::asynch::{Read, Write};
 #[cfg(feature = "log")]
 pub(crate) use log;
 
-use at_command::response::SimError;
+use at_command::SimError;
 use core::future::Future;
 
 pub trait SerialError {

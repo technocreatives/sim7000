@@ -1,4 +1,4 @@
-use crate::at_command::{ATParseErr, ATParseLine};
+use crate::at_command::{AtParseErr, AtParseLine};
 use crate::util::collect_array;
 
 /// Indicates whether the app network is active
@@ -9,8 +9,8 @@ pub struct IncomingConnection {
     pub remote_ip: [u8; 4],
 }
 
-impl ATParseLine for IncomingConnection {
-    fn from_line(line: &str) -> Result<Self, ATParseErr> {
+impl AtParseLine for IncomingConnection {
+    fn from_line(line: &str) -> Result<Self, AtParseErr> {
         let (message, ip) = line.split_once(": ").ok_or("Missing ': '")?;
         if message != "REMOTE IP" {
             return Err("Missing 'REMOTE IP'".into());

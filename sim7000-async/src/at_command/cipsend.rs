@@ -1,8 +1,7 @@
 use core::fmt::Write;
 use heapless::String;
 
-use super::ATRequest;
-use crate::at_command::response::WritePrompt;
+use super::{AtRequest, WritePrompt};
 
 /// AT+CIPSEND
 pub struct IpSend {
@@ -10,7 +9,7 @@ pub struct IpSend {
     pub data_length: usize,
 }
 
-impl ATRequest for IpSend {
+impl AtRequest for IpSend {
     type Response = WritePrompt;
     fn encode(&self) -> String<256> {
         let mut buf = String::new();

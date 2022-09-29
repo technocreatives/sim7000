@@ -1,8 +1,7 @@
 use core::fmt::Write;
 use heapless::String;
 
-use super::ATRequest;
-use crate::at_command::response::GenericOk;
+use super::{AtRequest, GenericOk};
 
 /// AT+IFC=...
 #[derive(Clone, Copy)]
@@ -19,7 +18,7 @@ pub enum FlowControl {
     Hardware = 2,
 }
 
-impl ATRequest for SetFlowControl {
+impl AtRequest for SetFlowControl {
     type Response = GenericOk;
     fn encode(&self) -> String<256> {
         let mut buf = String::new();

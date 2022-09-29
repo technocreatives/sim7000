@@ -1,8 +1,7 @@
 use core::fmt::Write;
 use heapless::String;
 
-use super::ATRequest;
-use crate::at_command::response::GenericOk;
+use super::{AtRequest, GenericOk};
 
 #[repr(u8)]
 #[derive(Clone, Copy)]
@@ -27,7 +26,7 @@ pub struct ConfigureEDRX {
     pub requested_edrx_value: u8,
 }
 
-impl ATRequest for ConfigureEDRX {
+impl AtRequest for ConfigureEDRX {
     type Response = GenericOk;
     fn encode(&self) -> String<256> {
         let mut buf = String::new();

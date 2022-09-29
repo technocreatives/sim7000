@@ -1,4 +1,4 @@
-use crate::at_command::{ATParseErr, ATParseLine};
+use crate::at_command::{AtParseErr, AtParseLine};
 
 // stub type
 /// Network time zone
@@ -15,8 +15,8 @@ pub enum PowerDown {
     OverVoltage,
 }
 
-impl ATParseLine for PowerDown {
-    fn from_line(line: &str) -> Result<Self, ATParseErr> {
+impl AtParseLine for PowerDown {
+    fn from_line(line: &str) -> Result<Self, AtParseErr> {
         // example: `NORMAL POWER DOWN`
         let (reason, message) = line.split_once(' ').ok_or("Missing ' '")?;
 

@@ -7,10 +7,7 @@ use embassy_sync::{
 };
 use heapless::{String, Vec};
 
-use crate::at_command::{
-    request::ATRequest,
-    response::{ATResponse, ResponseCode},
-};
+use crate::at_command::{AtRequest, AtResponse, ResponseCode};
 use crate::log;
 use crate::modem::ModemContext;
 use crate::Error;
@@ -73,11 +70,11 @@ impl<'a> CommandRunner<'a> {
 }
 
 impl<'a> CommandRunnerGuard<'a> {
-    pub async fn send_request<C: ATRequest>(&self, request: C) {
+    pub async fn send_request<C: AtRequest>(&self, request: C) {
         self.runner.commands.send(request.encode().into()).await;
     }
 
-    pub async fn expect_response<T: ATResponse>(&self) -> Result<T, Error> {
+    pub async fn expect_response<T: AtResponse>(&self) -> Result<T, Error> {
         loop {
             let response = self.runner.responses.recv().await;
 
@@ -105,7 +102,7 @@ impl<'a> CommandRunnerGuard<'a> {
 
     pub async fn run<C, Response>(&self, command: C) -> Result<Response, Error>
     where
-        C: ATRequest<Response = Response>,
+        C: AtRequest<Response = Response>,
         Response: ExpectResponse,
     {
         self.send_request(command).await;
@@ -121,7 +118,7 @@ pub trait ExpectResponse: Sized {
     fn expect<'a>(runner: &'a CommandRunnerGuard<'a>) -> Self::Fut<'a>;
 }
 
-impl<T: ATResponse> ExpectResponse for T {
+impl<T: AtResponse> ExpectResponse for T {
     type Fut<'a> = impl Future<Output = Result<Self, Error>> + 'a
     where
         Self: 'a;
@@ -131,7 +128,7 @@ impl<T: ATResponse> ExpectResponse for T {
     }
 }
 
-impl<T: ATResponse, Y: ATResponse> ExpectResponse for (T, Y) {
+impl<T: AtResponse, Y: AtResponse> ExpectResponse for (T, Y) {
     type Fut<'a> = impl Future<Output = Result<Self, Error>> + 'a
     where
         Self: 'a;

@@ -1,12 +1,11 @@
 use heapless::String;
 
-use super::ATRequest;
-use crate::at_command::response::GenericOk;
+use super::{AtRequest, GenericOk};
 
 /// AT+CBATCHK=...
 pub struct EnableVBatCheck(pub bool);
 
-impl ATRequest for EnableVBatCheck {
+impl AtRequest for EnableVBatCheck {
     type Response = GenericOk;
     fn encode(&self) -> String<256> {
         if self.0 {

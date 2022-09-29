@@ -1,4 +1,4 @@
-use crate::at_command::{ATParseErr, ATParseLine};
+use crate::at_command::{AtParseErr, AtParseLine};
 
 #[derive(Debug, PartialEq, Eq)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
@@ -29,8 +29,8 @@ pub enum ConnectionMessage {
     Closed,
 }
 
-impl ATParseLine for Connection {
-    fn from_line(line: &str) -> Result<Self, ATParseErr> {
+impl AtParseLine for Connection {
+    fn from_line(line: &str) -> Result<Self, AtParseErr> {
         let (index, message) = line.split_once(", ").ok_or("Missing ', '")?;
         let index = index.parse()?;
 

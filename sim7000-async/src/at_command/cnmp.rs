@@ -1,8 +1,7 @@
 use core::fmt::Write;
 use heapless::String;
 
-use super::ATRequest;
-use crate::at_command::response::GenericOk;
+use super::{AtRequest, GenericOk};
 
 #[repr(u8)]
 #[derive(Clone, Copy)]
@@ -16,7 +15,7 @@ pub enum NetworkMode {
 /// AT+CNMP=...
 pub struct SetNetworkMode(pub NetworkMode);
 
-impl ATRequest for SetNetworkMode {
+impl AtRequest for SetNetworkMode {
     type Response = GenericOk;
     fn encode(&self) -> String<256> {
         let mut buf = String::new();

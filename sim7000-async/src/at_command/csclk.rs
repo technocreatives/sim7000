@@ -1,11 +1,10 @@
 use heapless::String;
 
-use super::ATRequest;
-use crate::at_command::response::GenericOk;
+use super::{AtRequest, GenericOk};
 
 pub struct SetSlowClock(pub bool);
 
-impl ATRequest for SetSlowClock {
+impl AtRequest for SetSlowClock {
     type Response = GenericOk;
     fn encode(&self) -> String<256> {
         if self.0 {

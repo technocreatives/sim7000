@@ -1,12 +1,11 @@
 use heapless::String;
 
-use super::ATRequest;
-use crate::at_command::response::GenericOk;
+use super::{AtRequest, GenericOk};
 
 /// AT+CIICR
 pub struct StartGprs;
 
-impl ATRequest for StartGprs {
+impl AtRequest for StartGprs {
     type Response = GenericOk;
     fn encode(&self) -> String<256> {
         "AT+CIICR\r".into()

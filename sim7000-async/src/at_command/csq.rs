@@ -1,6 +1,16 @@
-use crate::at_command::{ATParseErr, ATParseLine};
+use heapless::String;
 
-use super::{ATResponse, ResponseCode};
+use super::{AtParseErr, AtParseLine, AtRequest, AtResponse, GenericOk, ResponseCode};
+
+/// AT+CSQ
+pub struct GetSignalQuality;
+
+impl AtRequest for GetSignalQuality {
+    type Response = (SignalQuality, GenericOk);
+    fn encode(&self) -> String<256> {
+        "AT+CSQ\r".into()
+    }
+}
 
 #[derive(Debug)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
@@ -12,8 +22,8 @@ pub struct SignalQuality {
     pub signal_quality: Option<f32>,
 }
 
-impl ATParseLine for SignalQuality {
-    fn from_line(line: &str) -> Result<Self, ATParseErr> {
+impl AtParseLine for SignalQuality {
+    fn from_line(line: &str) -> Result<Self, AtParseErr> {
         let line = line.strip_prefix("+CSQ: ").ok_or("Missing '+CSG: '")?;
         let (rssi, ber) = line.split_once(',').ok_or("Missing ','")?;
         let rssi: u8 = rssi.parse()?;
@@ -53,7 +63,7 @@ impl ATParseLine for SignalQuality {
     }
 }
 
-impl ATResponse for SignalQuality {
+impl AtResponse for SignalQuality {
     fn from_generic(code: ResponseCode) -> Result<Self, ResponseCode> {
         match code {
             ResponseCode::SignalQuality(sq) => Ok(sq),

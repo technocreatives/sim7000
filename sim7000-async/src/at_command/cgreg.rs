@@ -1,8 +1,7 @@
 use core::fmt::Write;
 use heapless::String;
 
-use super::ATRequest;
-use crate::at_command::response::GenericOk;
+use super::{AtRequest, GenericOk};
 
 /// AT+CGREG=...
 ///
@@ -25,7 +24,7 @@ pub enum ConfigureRegistrationUrc {
 /// AT+CGREG?
 pub struct GetRegistrationStatus;
 
-impl ATRequest for ConfigureRegistrationUrc {
+impl AtRequest for ConfigureRegistrationUrc {
     type Response = GenericOk;
     fn encode(&self) -> String<256> {
         let mut buf = String::new();
@@ -34,7 +33,7 @@ impl ATRequest for ConfigureRegistrationUrc {
     }
 }
 
-impl ATRequest for GetRegistrationStatus {
+impl AtRequest for GetRegistrationStatus {
     // The actual response is generated as an URC
     type Response = GenericOk;
 

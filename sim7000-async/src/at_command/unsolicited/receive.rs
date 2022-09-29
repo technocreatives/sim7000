@@ -1,4 +1,4 @@
-use crate::at_command::{ATParseErr, ATParseLine};
+use crate::at_command::{AtParseErr, AtParseLine};
 
 /// The modem is receiving data on a connection. It will transmit `length` bytes right after this header.
 #[derive(Debug)]
@@ -8,8 +8,8 @@ pub struct ReceiveHeader {
     pub length: usize,
 }
 
-impl ATParseLine for ReceiveHeader {
-    fn from_line(line: &str) -> Result<Self, ATParseErr> {
+impl AtParseLine for ReceiveHeader {
+    fn from_line(line: &str) -> Result<Self, AtParseErr> {
         let (message, rest) = line.split_once(',').ok_or("Missing first ','")?;
 
         if message != "+RECEIVE" {

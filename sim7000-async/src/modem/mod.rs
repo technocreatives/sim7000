@@ -6,9 +6,17 @@ use heapless::Vec;
 
 use crate::{
     at_command::{
-        request::*,
-        response::{SignalQuality, SystemInfo},
+        ate, cbatchk,
+        cedrxs::{self, AcTType, EDRXSetting},
+        cfgri::{self, RiPinMode},
+        cgnspwr, cgnsurc, cgreg, cifsrex, ciicr, cipmux, cipshut, cipstart,
+        cmee::{self, CMEErrorMode},
+        cmnb::{self, NbMode},
+        cnmp, cpsi, csclk, csq, cstt,
+        ifc::{self, FlowControl},
+        ipr::{self, BaudRate},
         unsolicited::{ConnectionMessage, RegistrationStatus},
+        At, ConnectMode, NetworkMode,
     },
     drop::{AsyncDrop, DropMessage},
     gnss::Gnss,
@@ -92,7 +100,7 @@ impl<'c, P: ModemPower> Modem<'c, P> {
 
         let commands = self.commands.lock().await;
 
-        let set_flow_control = SetFlowControl {
+        let set_flow_control = ifc::SetFlowControl {
             dce_by_dte: FlowControl::Hardware,
             dte_by_dce: FlowControl::Hardware,
         };
@@ -297,12 +305,12 @@ impl<'c, P: ModemPower> Modem<'c, P> {
         VoltageWarner::take(&self.context.voltage_slot)
     }
 
-    pub async fn query_system_info(&mut self) -> Result<SystemInfo, Error> {
+    pub async fn query_system_info(&mut self) -> Result<cpsi::SystemInfo, Error> {
         let (info, _) = self.commands.lock().await.run(cpsi::GetSystemInfo).await?;
         Ok(info)
     }
 
-    pub async fn query_signal(&mut self) -> Result<SignalQuality, Error> {
+    pub async fn query_signal(&mut self) -> Result<csq::SignalQuality, Error> {
         let (signal, _) = self
             .commands
             .lock()
