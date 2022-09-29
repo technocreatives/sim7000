@@ -1,8 +1,9 @@
 mod command;
 mod context;
 
+use core::sync::atomic::AtomicBool;
+
 use embassy_time::{with_timeout, Duration, Timer};
-use heapless::Vec;
 
 use crate::{
     at_command::{
@@ -272,8 +273,7 @@ impl<'c, P: ModemPower> Modem<'c, P> {
             ),
             token: tcp_context,
             commands: self.commands.clone(),
-            closed: false,
-            buffer: Vec::new(),
+            closed: AtomicBool::new(false),
         })
     }
 

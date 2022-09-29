@@ -56,12 +56,13 @@ pub async fn ping_tcpbin(
                 async move {
                     defmt::info!("Sending Marco");
                     const MARCO: &str = "\nFOOBARBAZBOPSHOP\n";
-                    stream.write_all(MARCO.as_bytes()).await?;
+                    let (mut reader, mut writer) = stream.split();
+                    writer.write_all(MARCO.as_bytes()).await?;
 
                     defmt::info!("Reading Polo");
                     let mut buf = [0u8; MARCO.len()];
 
-                    stream.read_exact(&mut buf).await.map_err(|err| match err {
+                    reader.read_exact(&mut buf).await.map_err(|err| match err {
                         ReadExactError::Other(err) => err,
                         ReadExactError::UnexpectedEof => TcpError::Closed,
                     })?;

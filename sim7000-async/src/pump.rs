@@ -69,8 +69,9 @@ impl<'context> Pump for RxPump<'context> {
                         log::info!("Reading {} bytes from modem", length);
                         while length > 0 {
                             log::debug!("remaining read: {}", length);
-                            let mut buf = Vec::new();
-                            buf.resize_default(usize::min(length, 365)).unwrap();
+                            let mut buf = Vec::<u8, 365>::new();
+                            buf.resize_default(usize::min(length, buf.capacity()))
+                                .unwrap();
                             self.reader.read_exact(&mut buf).await?;
                             length -= buf.len();
                             log::info!(
@@ -78,7 +79,7 @@ impl<'context> Pump for RxPump<'context> {
                                 buf.len(),
                                 connection
                             );
-                            self.tcp.slots[connection].peek().rx.send(buf).await;
+                            self.tcp.slots[connection].peek().rx.write(&buf).await;
                             log::info!("Bytes sent to tcp connection {}", connection);
                         }
                         log::info!("Done sending to tcp connection {}", connection);
