@@ -23,7 +23,7 @@ use crate::{
     gnss::Gnss,
     pump::{DropPump, RawIoPump, RxPump, TxPump},
     read::ModemReader,
-    tcp::TcpStream,
+    tcp::{ConnectError, TcpStream},
     voltage::VoltageWarner,
     BuildIo, Error, ModemPower,
 };
@@ -244,7 +244,11 @@ impl<'c, P: ModemPower> Modem<'c, P> {
         Ok(())
     }
 
-    pub async fn connect_tcp(&mut self, host: &str, port: u16) -> Result<TcpStream<'c>, Error> {
+    pub async fn connect_tcp(
+        &mut self,
+        host: &str,
+        port: u16,
+    ) -> Result<TcpStream<'c>, ConnectError> {
         let tcp_context = self.context.tcp.claim().unwrap();
 
         self.commands
@@ -261,7 +265,7 @@ impl<'c, P: ModemPower> Modem<'c, P> {
         loop {
             match tcp_context.events().recv().await {
                 ConnectionMessage::Connected => break,
-                ConnectionMessage::ConnectionFailed => panic!("connection failed"), //TODO
+                ConnectionMessage::ConnectionFailed => return Err(ConnectError::ConnectFailed),
                 _ => {}
             }
         }

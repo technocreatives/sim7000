@@ -26,9 +26,20 @@ pub enum TcpError {
     Closed,
 }
 
+pub enum ConnectError {
+    ConnectFailed,
+    Other(crate::Error),
+}
+
 impl embedded_io::Error for TcpError {
     fn kind(&self) -> embedded_io::ErrorKind {
         embedded_io::ErrorKind::Other
+    }
+}
+
+impl From<crate::Error> for ConnectError {
+    fn from(e: crate::Error) -> Self {
+        ConnectError::Other(e)
     }
 }
 
