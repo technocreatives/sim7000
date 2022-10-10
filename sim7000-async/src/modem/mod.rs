@@ -133,7 +133,7 @@ impl<'c, P: ModemPower> Modem<'c, P> {
             }
         }
 
-        commands.run(csclk::SetSlowClock(false)).await?;
+        commands.run(csclk::SetSlowClock(true)).await?;
         commands.run(At).await?;
         commands.run(ipr::SetBaudRate(BaudRate::Hz115200)).await?;
         commands.run(set_flow_control).await?;
@@ -341,5 +341,13 @@ impl<'c, P: ModemPower> Modem<'c, P> {
         self.run_command(ccid::ShowIccid)
             .await
             .map(|(response, _)| response)
+    }
+
+    pub async fn sleep(&mut self) {
+        self.power.sleep().await;
+    }
+
+    pub async fn wake(&mut self) {
+        self.power.wake().await;
     }
 }
