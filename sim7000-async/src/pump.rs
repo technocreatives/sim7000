@@ -79,7 +79,13 @@ impl<'context> Pump for RxPump<'context> {
                                 buf.len(),
                                 connection
                             );
-                            self.tcp.slots[connection].peek().rx.write(&buf).await;
+                            self.tcp.slots[connection]
+                                .peek()
+                                .rx
+                                .writer()
+                                .write_all(&buf)
+                                .await
+                                .ok(/* infallible */);
                             log::info!("Bytes sent to tcp connection {}", connection);
                         }
                         log::info!("Done sending to tcp connection {}", connection);

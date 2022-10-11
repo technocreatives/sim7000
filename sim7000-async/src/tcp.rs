@@ -167,7 +167,7 @@ impl<'s> Write for TcpWriter<'s> {
                         self.closed.store(true, Ordering::Release);
                         return Err(TcpError::Closed);
                     }
-                    _ => panic!(),
+                    event => panic!("unexpected tcp event: {event:?}"),
                 }
             }
 
