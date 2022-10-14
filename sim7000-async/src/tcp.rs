@@ -2,15 +2,16 @@ use core::{
     future::Future,
     sync::atomic::{AtomicBool, Ordering},
 };
+use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, pubsub::PubSubChannel};
 use embedded_io::{
     asynch::{Read, Write},
     Io,
 };
-use futures_util::future::{select, Either};
+use futures_util::FutureExt;
 
 use crate::{
     at_command::{cipsend, unsolicited::ConnectionMessage},
-    drop::AsyncDrop,
+    drop::{AsyncDrop, DropChannel, DropMessage},
     log,
     modem::{CommandRunner, TcpToken},
 };
@@ -46,21 +47,19 @@ impl From<crate::Error> for ConnectError {
 }
 
 pub struct TcpStream<'s> {
-    pub(crate) token: TcpToken<'s>,
-    pub(crate) _drop: AsyncDrop<'s>,
-    pub(crate) commands: CommandRunner<'s>,
-    pub(crate) closed: AtomicBool,
+    token: TcpToken<'s>,
+    _drop: AsyncDrop<'s>,
+    commands: CommandRunner<'s>,
+    closed: AtomicBool,
+    events: PubSubChannel<CriticalSectionRawMutex, ConnectionMessage, 1, 2, 2>,
 }
 
 pub struct TcpReader<'s> {
-    token: &'s TcpToken<'s>,
-    closed: &'s AtomicBool,
+    stream: &'s TcpStream<'s>,
 }
 
 pub struct TcpWriter<'s> {
-    token: &'s TcpToken<'s>,
-    closed: &'s AtomicBool,
-    commands: &'s CommandRunner<'s>,
+    stream: &'s TcpStream<'s>,
 }
 
 impl<'s> Io for TcpStream<'s> {
@@ -82,19 +81,34 @@ impl Drop for TcpStream<'_> {
 }
 
 impl<'s> TcpStream<'s> {
+    pub(crate) fn new(
+        token: TcpToken<'s>,
+        drop_channel: &'s DropChannel,
+        commands: CommandRunner<'s>,
+    ) -> Self {
+        TcpStream {
+            _drop: AsyncDrop::new(drop_channel, DropMessage::Connection(token.ordinal())),
+            token,
+            commands,
+            closed: AtomicBool::new(false),
+            events: PubSubChannel::new(),
+        }
+    }
+
     pub fn split(&mut self) -> (TcpReader<'_>, TcpWriter<'_>) {
-        let reader = TcpReader {
-            token: &self.token,
-            closed: &self.closed,
-        };
-
-        let writer = TcpWriter {
-            token: &self.token,
-            closed: &self.closed,
-            commands: &self.commands,
-        };
-
+        let reader = TcpReader { stream: self };
+        let writer = TcpWriter { stream: self };
         (reader, writer)
+    }
+
+    /// Must be used in a select in combination with awaiting events
+    async fn handle_events(&self) -> ! {
+        let publisher =
+            self.events.publisher().unwrap(/* capacity is 2, only reader and writer use channel */);
+        loop {
+            let event = self.token.events().recv().await;
+            publisher.publish(event).await;
+        }
     }
 }
 
@@ -143,15 +157,21 @@ impl<'s> Write for TcpWriter<'s> {
 
     fn write<'a>(&'a mut self, buf: &'a [u8]) -> Self::WriteFuture<'a> {
         async {
-            if self.closed.load(Ordering::Acquire) {
+            let stream = self.stream;
+            let mut events = stream
+                .events
+                .subscriber()
+                .expect("claim tcp stream event subscriber");
+
+            if stream.closed.load(Ordering::Acquire) {
                 return Err(TcpError::Closed);
             }
 
-            let commands = self.commands.lock().await;
+            let commands = stream.commands.lock().await;
 
             commands
                 .run(cipsend::IpSend {
-                    connection: self.token.ordinal(),
+                    connection: stream.token.ordinal(),
                     data_length: buf.len(),
                 })
                 .await
@@ -160,14 +180,17 @@ impl<'s> Write for TcpWriter<'s> {
             commands.send_bytes(buf).await;
 
             loop {
-                match self.token.events().recv().await {
-                    ConnectionMessage::SendFail => return Err(TcpError::SendFail),
-                    ConnectionMessage::SendSuccess => break,
-                    ConnectionMessage::Closed => {
-                        self.closed.store(true, Ordering::Release);
-                        return Err(TcpError::Closed);
+                futures::select_biased! {
+                    _ = stream.handle_events().fuse() => unreachable!(),
+                    event = events.next_message_pure().fuse() => match event {
+                        ConnectionMessage::SendFail => return Err(TcpError::SendFail),
+                        ConnectionMessage::SendSuccess => break,
+                        ConnectionMessage::Closed => {
+                            stream.closed.store(true, Ordering::Release);
+                            return Err(TcpError::Closed);
+                        }
+                        _ => {}
                     }
-                    event => panic!("unexpected tcp event: {event:?}"),
                 }
             }
 
@@ -187,32 +210,34 @@ impl<'s> Read for TcpReader<'s> {
 
     fn read<'a>(&'a mut self, buf: &'a mut [u8]) -> Self::ReadFuture<'a> {
         async {
-            if self.closed.load(Ordering::Acquire) {
+            let stream = self.stream;
+
+            let mut events = stream
+                .events
+                .subscriber()
+                .expect("claim tcp stream event subscriber");
+
+            if stream.closed.load(Ordering::Acquire) {
                 return Ok(0);
             }
 
-            let result = select(self.token.rx().read(buf), self.token.events().recv()).await;
-
-            log::info!("{} awaiting rx/event", self.token.ordinal());
-
             loop {
-                match &result {
-                    Either::Left((n, _)) => {
-                        log::info!("{} rx got {} bytes", self.token.ordinal(), n);
-                    }
-                    Either::Right((event, _)) => {
-                        log::info!("{} event got {:?}", self.token.ordinal(), event);
-                    }
-                }
+                log::info!("tcp {} awaiting rx/event", stream.token.ordinal());
 
-                match result {
-                    Either::Left((n, _)) => break Ok(n),
-                    Either::Right((event, _)) if event == ConnectionMessage::Closed => {
-                        self.closed.store(true, Ordering::Release);
-                        break Ok(0);
+                futures::select_biased! {
+                    _ = stream.handle_events().fuse() => unreachable!(),
+                    n = stream.token.rx().read(buf).fuse() => {
+                        log::info!("tcp {} rx got {} bytes", stream.token.ordinal(), n);
+                        break Ok(n);
                     }
-                    _ => continue,
-                }
+                    event = events.next_message_pure().fuse() => {
+                        log::info!("tcp {} got event {:?}", stream.token.ordinal(), event);
+                        if event == ConnectionMessage::Closed {
+                            stream.closed.store(true, Ordering::Release);
+                            break Ok(0);
+                        }
+                    }
+                };
             }
         }
     }
