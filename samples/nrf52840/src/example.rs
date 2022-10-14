@@ -22,6 +22,7 @@ pub enum Error {
     Spawn(SpawnError),
     Sim(sim7000_async::Error),
     Tcp(sim7000_async::tcp::TcpError),
+    Connect(sim7000_async::tcp::ConnectError),
     Utf8(Utf8Error),
 }
 
@@ -149,6 +150,12 @@ impl From<sim7000_async::tcp::TcpError> for Error {
     }
 }
 
+impl From<sim7000_async::tcp::ConnectError> for Error {
+    fn from(e: sim7000_async::tcp::ConnectError) -> Self {
+        Error::Connect(e)
+    }
+}
+
 impl From<Utf8Error> for Error {
     fn from(e: Utf8Error) -> Self {
         Error::Utf8(e)
@@ -164,6 +171,7 @@ impl defmt::Format for Error {
             Error::Spawn(_) => write!(f, "SpawnError"),
             Error::Sim(e) => write!(f, "Sim({:?})", e),
             Error::Tcp(e) => write!(f, "Tcp({:?})", e),
+            Error::Connect(e) => write!(f, "Connect({:?})", e),
             Error::Utf8(_) => write!(f, "Utf8Error"),
         }
     }
