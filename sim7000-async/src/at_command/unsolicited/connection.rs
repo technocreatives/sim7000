@@ -7,7 +7,7 @@ pub struct Connection {
     pub message: ConnectionMessage,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum ConnectionMessage {
     /// The connection was successfully established

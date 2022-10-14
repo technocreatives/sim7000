@@ -1,8 +1,6 @@
 mod command;
 mod context;
 
-use core::sync::atomic::AtomicBool;
-
 use embassy_time::{with_timeout, Duration, Timer};
 
 use crate::{
@@ -270,15 +268,11 @@ impl<'c, P: ModemPower> Modem<'c, P> {
             }
         }
 
-        Ok(TcpStream {
-            _drop: AsyncDrop::new(
-                &self.context.drop_channel,
-                DropMessage::Connection(tcp_context.ordinal()),
-            ),
-            token: tcp_context,
-            commands: self.commands.clone(),
-            closed: AtomicBool::new(false),
-        })
+        Ok(TcpStream::new(
+            tcp_context,
+            &self.context.drop_channel,
+            self.commands.clone(),
+        ))
     }
 
     pub async fn claim_gnss(&mut self) -> Result<Option<Gnss<'c>>, Error> {
