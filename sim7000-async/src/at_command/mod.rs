@@ -1,4 +1,7 @@
-use core::num::{ParseFloatError, ParseIntError};
+use core::{
+    fmt::Debug,
+    num::{ParseFloatError, ParseIntError},
+};
 
 pub mod generic_response;
 pub mod unsolicited;
@@ -71,7 +74,14 @@ pub(crate) trait AtParseLine: Sized {
     fn from_line(line: &str) -> Result<Self, AtParseErr>;
 }
 
-pub trait AtRequest {
+#[cfg(feature = "defmt")]
+pub trait AtRequest: defmt::Format {
+    type Response;
+    fn encode(&self) -> heapless::String<256>;
+}
+
+#[cfg(not(feature = "defmt"))]
+pub trait AtRequest: Debug {
     type Response;
     fn encode(&self) -> heapless::String<256>;
 }

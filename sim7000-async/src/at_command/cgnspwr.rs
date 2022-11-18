@@ -4,6 +4,8 @@ use heapless::String;
 use super::{AtRequest, GenericOk};
 
 /// AT+CGNSPWR=...
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+#[cfg_attr(not(feature = "defmt"), derive(Debug))]
 pub struct SetGnssPower(pub bool);
 
 impl AtRequest for SetGnssPower {

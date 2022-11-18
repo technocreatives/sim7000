@@ -4,6 +4,9 @@ use crate::util::collect_array;
 
 use super::{AtParseErr, AtParseLine, AtRequest, AtResponse, GenericOk, ResponseCode};
 
+/// AT+COPS?
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+#[cfg_attr(not(feature = "defmt"), derive(Debug))]
 pub struct GetOperatorInfo;
 
 #[derive(Debug)]
