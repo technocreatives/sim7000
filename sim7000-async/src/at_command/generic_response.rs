@@ -47,11 +47,11 @@ impl AtResponse for GenericOk {
 
 impl AtParseLine for SimError {
     fn from_line(line: &str) -> Result<Self, AtParseErr> {
-        if let Some(code) = line.strip_prefix("+CME ERROR") {
+        if let Some(code) = line.strip_prefix("+CME ERROR: ") {
             Ok(SimError::CmeErr {
                 code: code.parse()?,
             })
-        } else if let Some(code) = line.strip_prefix("+CMS ERROR") {
+        } else if let Some(code) = line.strip_prefix("+CMS ERROR: ") {
             Ok(SimError::CmsErr {
                 code: code.parse()?,
             })
