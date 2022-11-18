@@ -5,6 +5,8 @@ use super::{AtRequest, GenericOk};
 
 #[repr(u32)]
 #[derive(Clone, Copy)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+#[cfg_attr(not(feature = "defmt"), derive(Debug))]
 pub enum BaudRate {
     Hz0 = 0,
     Hz300 = 300,
@@ -28,6 +30,8 @@ pub enum BaudRate {
 }
 
 /// AT+IPR=...
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+#[cfg_attr(not(feature = "defmt"), derive(Debug))]
 pub struct SetBaudRate(pub BaudRate);
 
 impl AtRequest for SetBaudRate {

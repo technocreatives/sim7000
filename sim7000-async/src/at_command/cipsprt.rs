@@ -6,6 +6,8 @@ use super::{AtRequest, GenericOk};
 /// AT+CIPSPRT=...
 #[repr(u8)]
 #[derive(Clone, Copy)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+#[cfg_attr(not(feature = "defmt"), derive(Debug))]
 pub enum SetCipSendPrompt {
     /// Send SEND OK but do not send "> " prompt
     ResponseNoPrompt = 0,

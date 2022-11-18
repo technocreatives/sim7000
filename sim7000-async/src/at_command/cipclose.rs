@@ -4,6 +4,8 @@ use heapless::String;
 use super::{AtRequest, CloseOk};
 
 /// AT+CIPCLOSE=...
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+#[cfg_attr(not(feature = "defmt"), derive(Debug))]
 pub struct CloseConnection {
     pub connection: usize,
 }

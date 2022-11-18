@@ -3,12 +3,16 @@ use heapless::String;
 
 use super::{AtRequest, GenericOk};
 
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+#[cfg_attr(not(feature = "defmt"), derive(Debug))]
 pub enum ConnectMode {
     Tcp,
     Udp,
 }
 
 /// AT+CIPSTART=...
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+#[cfg_attr(not(feature = "defmt"), derive(Debug))]
 pub struct Connect {
     /// Which connection slot to use (Multi-IP mode)
     pub number: usize,
@@ -17,6 +21,7 @@ pub struct Connect {
     pub mode: ConnectMode,
 
     /// IP or domain name
+    #[cfg_attr(feature = "defmt", defmt(Debug2Format))]
     pub destination: String<100>,
 
     pub port: u16,

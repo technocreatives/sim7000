@@ -5,6 +5,8 @@ use super::{AtRequest, GenericOk};
 
 #[repr(u8)]
 #[derive(Clone, Copy)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+#[cfg_attr(not(feature = "defmt"), derive(Debug))]
 pub enum NetworkMode {
     Automatic = 2,
     Gsm = 13,
@@ -13,6 +15,8 @@ pub enum NetworkMode {
 }
 
 /// AT+CNMP=...
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+#[cfg_attr(not(feature = "defmt"), derive(Debug))]
 pub struct SetNetworkMode(pub NetworkMode);
 
 impl AtRequest for SetNetworkMode {
