@@ -222,16 +222,16 @@ impl<'s> Read for TcpReader<'s> {
             }
 
             loop {
-                log::info!("tcp {} awaiting rx/event", stream.token.ordinal());
+                log::trace!("tcp {} awaiting rx/event", stream.token.ordinal());
 
                 futures::select_biased! {
                     _ = stream.handle_events().fuse() => unreachable!(),
                     n = stream.token.rx().read(buf).fuse() => {
-                        log::info!("tcp {} rx got {} bytes", stream.token.ordinal(), n);
+                        log::trace!("tcp {} rx got {} bytes", stream.token.ordinal(), n);
                         break Ok(n);
                     }
                     event = events.next_message_pure().fuse() => {
-                        log::info!("tcp {} got event {:?}", stream.token.ordinal(), event);
+                        log::trace!("tcp {} got event {:?}", stream.token.ordinal(), event);
                         if event == ConnectionMessage::Closed {
                             stream.closed.store(true, Ordering::Release);
                             break Ok(0);

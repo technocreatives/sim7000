@@ -58,7 +58,7 @@ impl<'context> Pump for RxPump<'context> {
             if let Ok(message) = Urc::from_line(&line) {
                 // First, check if it's an unsolicited message
 
-                log::info!("Got URC: {:?}", line.as_str());
+                log::debug!("Got URC: {:?}", line.as_str());
                 match message {
                     Urc::RegistrationStatus(status) => {
                         self.registration_events.signal(status);
@@ -66,7 +66,7 @@ impl<'context> Pump for RxPump<'context> {
                     Urc::ReceiveHeader(header) => {
                         let mut length = header.length;
                         let connection = header.connection;
-                        log::info!("Reading {} bytes from modem", length);
+                        log::debug!("Reading {} bytes from modem", length);
                         while length > 0 {
                             log::debug!("remaining read: {}", length);
                             let mut buf = Vec::<u8, 365>::new();
@@ -74,7 +74,7 @@ impl<'context> Pump for RxPump<'context> {
                                 .unwrap();
                             self.reader.read_exact(&mut buf).await?;
                             length -= buf.len();
-                            log::info!(
+                            log::debug!(
                                 "Sending {} bytes to tcp connection {}",
                                 buf.len(),
                                 connection
@@ -86,9 +86,9 @@ impl<'context> Pump for RxPump<'context> {
                                 .write_all(&buf)
                                 .await
                                 .ok(/* infallible */);
-                            log::info!("Bytes sent to tcp connection {}", connection);
+                            log::debug!("Bytes sent to tcp connection {}", connection);
                         }
-                        log::info!("Done sending to tcp connection {}", connection);
+                        log::debug!("Done sending to tcp connection {}", connection);
                     }
                     Urc::ConnectionMessage(message) => {
                         self.tcp.slots[message.index]
@@ -114,7 +114,7 @@ impl<'context> Pump for RxPump<'context> {
             } else if let Ok(response) = ResponseCode::from_line(&line) {
                 // If it's not a URC, try to parse it as a regular response code
 
-                log::info!("Got generic response: {:?}", line.as_str());
+                log::debug!("Got generic response: {:?}", line.as_str());
                 if with_timeout(
                     Duration::from_secs(10),
                     self.generic_response.send(response),
@@ -150,8 +150,8 @@ impl<'context> Pump for TxPump<'context> {
         async {
             let command = self.commands.recv().await;
             match &command {
-                RawAtCommand::Text(text) => log::info!("Write to modem: {:?}", text.as_str()),
-                RawAtCommand::Binary(bytes) => log::info!("Write {} bytes to modem", bytes.len()),
+                RawAtCommand::Text(text) => log::debug!("Write to modem: {:?}", text.as_str()),
+                RawAtCommand::Binary(bytes) => log::debug!("Write {} bytes to modem", bytes.len()),
             }
 
             // `Writer` is infallible. It is fine to ignore these errors.
@@ -239,8 +239,8 @@ impl<'context, RW: 'static + BuildIo> RawIoPump<'context, RW> {
                     let bytes = result.map_err(|_| Error::Serial)?;
 
                     match from_utf8(&rx_buf[..bytes]) {
-                        Ok(line) => log::debug!("BYTES READ {:?}", line),
-                        Err(_) => log::debug!("READ INVALID {:?}", &rx_buf[..bytes]),
+                        Ok(line) => log::trace!("BYTES READ {:?}", line),
+                        Err(_) => log::trace!("READ INVALID {:?}", &rx_buf[..bytes]),
                     }
 
                     self.rx.write_all(&rx_buf[..bytes]).await.ok(/* infallible */);

@@ -24,8 +24,8 @@ impl<'context> ModemReader<'context> {
         loop {
             if !self.buffer.is_empty() {
                 match from_utf8(&self.buffer) {
-                    Ok(line) => log::debug!("CURRENT BUFFER {:?}", line),
-                    Err(_) => log::debug!("INVALID UTF-8 {:?}", self.buffer.as_slice()),
+                    Ok(line) => log::trace!("CURRENT BUFFER (utf-8) {:?}", line),
+                    Err(_) => log::trace!("CURRENT BUFFER (binary) {:?}", self.buffer.as_slice()),
                 }
             }
 
@@ -57,7 +57,7 @@ impl<'context> ModemReader<'context> {
                         return Err(err);
                     }
                 };
-                log::debug!("RECV LINE: {:?}", line);
+                log::trace!("RECV LINE: {:?}", line);
 
                 // Ignore empty lines, as well as echoed lines ending with just a CR
                 if line.trim().is_empty() || line.ends_with('\r') {
