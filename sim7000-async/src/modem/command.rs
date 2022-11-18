@@ -70,7 +70,7 @@ impl<'a> CommandRunner<'a> {
 }
 
 impl<'a> CommandRunnerGuard<'a> {
-    pub async fn send_request<C: AtRequest>(&self, request: C) {
+    pub async fn send_request<C: AtRequest>(&self, request: &C) {
         self.runner.commands.send(request.encode().into()).await;
     }
 
@@ -105,11 +105,21 @@ impl<'a> CommandRunnerGuard<'a> {
         C: AtRequest<Response = Response>,
         Response: ExpectResponse,
     {
-        self.send_request(command).await;
-        Response::expect(self).await
+        self.send_request(&command).await;
+        let result = Response::expect(self).await;
+
+        if let Err(e) = &result {
+            log::error!("AT command {:?} error: {:?}", command, e);
+        }
+
+        result
     }
 }
 
+/// Implemented for (tuples of) AtResponse.
+///
+/// In order to support AtRequest::Response being a tuple of arbitrary size, we
+/// implement the ExpectResponse trait for tuples with as many member as we need.
 pub trait ExpectResponse: Sized {
     type Fut<'a>: Future<Output = Result<Self, Error>> + 'a
     where
