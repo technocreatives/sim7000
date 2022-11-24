@@ -13,7 +13,7 @@ use embassy_nrf::{
     peripherals::{PPI_CH1, PPI_CH2, TIMER0, UARTE0},
     uarte,
 };
-use embassy_time::{with_timeout, Duration, Timer};
+use embassy_time::{Duration, Timer};
 use sim7000_async::{spawn_modem, BuildIo, ModemPower, PowerState, SplitIo};
 
 use defmt_rtt as _; // linker shenanigans
@@ -197,74 +197,6 @@ impl<'d> SplitIo for AppUarte<'d> {
 
     fn split<'u>(&'u mut self) -> (Self::Reader<'u>, Self::Writer<'u>) {
         self.0.split()
-    }
-}
-
-#[repr(transparent)]
-struct AppUarteRead<'d>(
-    embassy_nrf::uarte::UarteRxWithIdle<
-        'd,
-        embassy_nrf::peripherals::UARTE0,
-        embassy_nrf::peripherals::TIMER0,
-    >,
-);
-
-impl<'d> embedded_io::Io for AppUarteRead<'d> {
-    type Error = sim7000_async::Error;
-}
-
-impl<'d> embedded_io::asynch::Read for AppUarteRead<'d> {
-    type ReadFuture<'a> = impl Future<Output = Result<usize, Self::Error>> + 'a
-    where
-    Self: 'a;
-
-    fn read<'a>(&'a mut self, read: &'a mut [u8]) -> Self::ReadFuture<'a> {
-        async move {
-            defmt::trace!("Read until idle");
-            let n = match with_timeout(Duration::from_millis(1000), self.0.read_until_idle(read))
-                .await
-            {
-                Ok(Ok(result)) => result,
-                Ok(Err(_err)) => return Err(sim7000_async::Error::Serial),
-                Err(_) => 0,
-            };
-
-            if n > 0 {
-                defmt::debug!("Read {} bytes from modem uarte", n);
-            }
-
-            Ok(n)
-        }
-    }
-}
-
-struct AppUarteWrite<'d>(embassy_nrf::uarte::UarteTx<'d, embassy_nrf::peripherals::UARTE0>);
-
-impl<'d> embedded_io::Io for AppUarteWrite<'d> {
-    type Error = sim7000_async::Error;
-}
-
-impl<'d> embedded_io::asynch::Write for AppUarteWrite<'d> {
-    type WriteFuture<'a> = impl Future<Output = Result<usize, Self::Error>> + 'a
-    where
-        Self: 'a;
-
-    type FlushFuture<'a> = impl Future<Output = Result<(), Self::Error>> + 'a
-    where
-        Self: 'a;
-
-    fn write<'a>(&'a mut self, words: &'a [u8]) -> Self::WriteFuture<'a> {
-        async {
-            self.0
-                .write(words)
-                .await
-                .map_err(|_| sim7000_async::Error::Serial)?;
-            Ok(words.len())
-        }
-    }
-
-    fn flush(&mut self) -> Self::FlushFuture<'_> {
-        async { Ok(()) }
     }
 }
 
