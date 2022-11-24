@@ -101,7 +101,9 @@ impl<'s> TcpStream<'s> {
         (reader, writer)
     }
 
-    /// Must be used in a select in combination with awaiting events
+    /// Listen to, and forward tcp events to both the read and the write half of this stream.
+    ///
+    /// Must be used in a select in combination with awaiting `TcpStream.events`
     async fn handle_events(&self) -> ! {
         let publisher =
             self.events.publisher().unwrap(/* capacity is 2, only reader and writer use channel */);
@@ -163,33 +165,40 @@ impl<'s> Write for TcpWriter<'s> {
                 .subscriber()
                 .expect("claim tcp stream event subscriber");
 
-            if stream.closed.load(Ordering::Acquire) {
-                return Err(TcpError::Closed);
-            }
+            /// The maximum number of bytes the modem can handle in a single CIPSEND command
+            // TODO: I *think* this is configurable in the modem, if so, we should check what this
+            // value actually is.
+            const MODEM_WRITE_BUF: usize = 1024;
 
-            let commands = stream.commands.lock().await;
+            for chunk in buf.chunks(MODEM_WRITE_BUF) {
+                if stream.closed.load(Ordering::Acquire) {
+                    return Err(TcpError::Closed);
+                }
 
-            commands
-                .run(cipsend::IpSend {
-                    connection: stream.token.ordinal(),
-                    data_length: buf.len(),
-                })
-                .await
-                .map_err(|_| TcpError::SendFail)?;
+                let commands = stream.commands.lock().await;
 
-            commands.send_bytes(buf).await;
+                commands
+                    .run(cipsend::IpSend {
+                        connection: stream.token.ordinal(),
+                        data_length: chunk.len(),
+                    })
+                    .await
+                    .map_err(|_| TcpError::SendFail)?;
 
-            loop {
-                futures::select_biased! {
-                    _ = stream.handle_events().fuse() => unreachable!(),
-                    event = events.next_message_pure().fuse() => match event {
-                        ConnectionMessage::SendFail => return Err(TcpError::SendFail),
-                        ConnectionMessage::SendSuccess => break,
-                        ConnectionMessage::Closed => {
-                            stream.closed.store(true, Ordering::Release);
-                            return Err(TcpError::Closed);
+                commands.send_bytes(chunk).await;
+
+                loop {
+                    futures::select_biased! {
+                        _ = stream.handle_events().fuse() => unreachable!(),
+                        event = events.next_message_pure().fuse() => match event {
+                            ConnectionMessage::SendFail => return Err(TcpError::SendFail),
+                            ConnectionMessage::SendSuccess => break,
+                            ConnectionMessage::Closed => {
+                                stream.closed.store(true, Ordering::Release);
+                                return Err(TcpError::Closed);
+                            }
+                            _ => {}
                         }
-                        _ => {}
                     }
                 }
             }
