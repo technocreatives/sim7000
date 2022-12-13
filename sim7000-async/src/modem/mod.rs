@@ -8,7 +8,7 @@ use crate::{
         ate, cbatchk, ccid,
         cedrxs::{self, AcTType, EDRXSetting},
         cfgri::{self, RiPinMode},
-        cgnspwr, cgnsurc, cgreg, cifsrex, ciicr, cipmux, cipshut, cipstart,
+        cgmr, cgnspwr, cgnsurc, cgreg, cifsrex, ciicr, cipmux, cipshut, cipstart,
         cmee::{self, CMEErrorMode},
         cmnb::{self, NbMode},
         cnmp, cops, cpsi, csclk, csq, cstt,
@@ -333,6 +333,12 @@ impl<'c, P: ModemPower> Modem<'c, P> {
 
     pub async fn query_iccid(&mut self) -> Result<ccid::Iccid, Error> {
         self.run_command(ccid::ShowIccid)
+            .await
+            .map(|(response, _)| response)
+    }
+
+    pub async fn query_firmware_version(&mut self) -> Result<cgmr::FwVersion, Error> {
+        self.run_command(cgmr::GetFwVersion)
             .await
             .map(|(response, _)| response)
     }

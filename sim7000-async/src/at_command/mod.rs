@@ -14,6 +14,7 @@ pub mod cbatchk;
 pub mod ccid;
 pub mod cedrxs;
 pub mod cfgri;
+pub mod cgmr;
 pub mod cgnspwr;
 pub mod cgnsurc;
 pub mod cgreg;
@@ -42,6 +43,7 @@ pub use cbatchk::EnableVBatCheck;
 pub use ccid::{Iccid, ShowIccid};
 pub use cedrxs::{AcTType, ConfigureEDRX, EDRXSetting};
 pub use cfgri::{ConfigureRiPin, RiPinMode};
+pub use cgmr::{FwVersion, GetFwVersion};
 pub use cgnspwr::SetGnssPower;
 pub use cgnsurc::ConfigureGnssUrc;
 pub use cgreg::{ConfigureRegistrationUrc, GetRegistrationStatus};
@@ -103,6 +105,7 @@ pub enum ResponseCode {
     SignalQuality(SignalQuality),
     SystemInfo(SystemInfo),
     OperatorInfo(OperatorInfo),
+    FwVersion(FwVersion),
 }
 
 impl AtParseLine for ResponseCode {
@@ -125,6 +128,7 @@ impl AtParseLine for ResponseCode {
             .or_else(parse(line, ResponseCode::SignalQuality))
             .or_else(parse(line, ResponseCode::SystemInfo))
             .or_else(parse(line, ResponseCode::OperatorInfo))
+            .or_else(parse(line, ResponseCode::FwVersion))
             .map_err(|_| "Unknown response code".into())
     }
 }

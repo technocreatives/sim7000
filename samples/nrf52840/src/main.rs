@@ -95,6 +95,10 @@ async fn main(spawner: Spawner) {
     defmt::info!("ICCID: {:?}", modem.query_iccid().await);
     defmt::info!("Signal quality: {:?}", modem.query_signal().await);
     defmt::info!("System info: {:?}", modem.query_system_info().await);
+    defmt::info!(
+        "Firmware version: {:?}",
+        modem.query_firmware_version().await,
+    );
 
     for _ in 0..100 {
         defmt::info!("sleeping 1s");
