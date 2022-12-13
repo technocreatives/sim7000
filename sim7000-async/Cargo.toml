@@ -24,4 +24,20 @@ critical-section = "0.2.7"
 
 [features]
 default = ["log"]
-
+log = [
+    "dep:log",
+    "embassy-executor/log",
+    "embassy-futures/log",
+    "embassy-sync/log",
+    "embassy-time/log",
+    "embedded-io/log",
+]
+defmt = [
+    "dep:defmt",
+    "embassy-executor/defmt",
+    "embassy-futures/defmt",
+    "embassy-sync/defmt",
+    "embassy-time/defmt",
+    "embedded-io/defmt",
+    "heapless/defmt-impl",
+]
