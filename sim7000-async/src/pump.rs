@@ -1,15 +1,15 @@
-use crate::{BuildIo, SplitIo};
+use crate::{modem::power::PowerSignalListener, BuildIo, PowerState, SplitIo};
 use core::{future::Future, str::from_utf8};
-use embassy_futures::select::{select, select3, Either, Either3};
+use embassy_futures::select::{select3, Either3};
 use embassy_sync::{
     blocking_mutex::raw::CriticalSectionRawMutex,
     channel::{Receiver, Sender},
     pipe::{Reader, Writer},
-    pubsub::DynSubscriber,
     signal::Signal,
 };
 use embassy_time::{with_timeout, Duration};
 use embedded_io::asynch::{Read, Write};
+use futures::{select_biased, FutureExt};
 use heapless::Vec;
 
 use crate::at_command::{
@@ -165,8 +165,8 @@ impl<'context> Pump for TxPump<'context> {
 
 pub struct DropPump<'context> {
     pub(crate) context: &'context ModemContext,
-    pub(crate) power_signal: DynSubscriber<'context, bool>,
-    pub(crate) power_state: bool,
+    pub(crate) power_signal: PowerSignalListener<'context>,
+    pub(crate) power_state: PowerState,
 }
 
 impl<'context> Pump for DropPump<'context> {
@@ -177,24 +177,30 @@ impl<'context> Pump for DropPump<'context> {
 
     fn pump(&mut self) -> Self::Fut<'_> {
         async {
-            match select(
-                self.context.drop_channel.recv(),
-                self.power_signal.next_message_pure(),
-            )
-            .await
-            {
-                Either::First(drop_message) => {
-                    if self.power_state {
-                        let runner = self.context.commands();
-                        let mut runner = runner.lock().await;
-                        drop_message.run(&mut runner).await?;
-                        drop(runner);
-                        drop_message.clean_up(self.context);
-                    }
-                }
-                Either::Second(power_state) => {
+            select_biased! {
+                power_state = self.power_signal.listen().fuse() => {
                     self.power_state = power_state;
                 }
+                drop_message = self.context.drop_channel.recv().fuse() => {
+                    if self.power_state == PowerState::On {
+                        // run drop command, abort if power state changes
+                        select_biased! {
+                            power_state = self.power_signal.listen().fuse() => {
+                                self.power_state = power_state;
+                            }
+                            result = async {
+                                // run drop command
+                                let runner = self.context.commands();
+                                let mut runner = runner.lock().await;
+                                drop_message.run(&mut runner).await
+                            }.fuse() => {
+                                // perform clean-up regardless of whether drop command succeeded
+                                drop_message.clean_up(self.context);
+                                result?;
+                            }
+                        }
+                    }
+                },
             }
 
             Ok(())
@@ -208,8 +214,8 @@ pub struct RawIoPump<'context, RW> {
     pub(crate) rx: Writer<'context, CriticalSectionRawMutex, 2048>,
     /// reads data from the tx pump
     pub(crate) tx: Reader<'context, CriticalSectionRawMutex, 2048>,
-    pub(crate) power_signal: DynSubscriber<'context, bool>,
-    pub(crate) power_state: bool,
+    pub(crate) power_signal: PowerSignalListener<'context>,
+    pub(crate) power_state: PowerState,
 }
 
 impl<'context, RW: 'static + BuildIo> RawIoPump<'context, RW> {
@@ -224,7 +230,7 @@ impl<'context, RW: 'static + BuildIo> RawIoPump<'context, RW> {
             match select3(
                 self.tx.read(&mut tx_buf),
                 reader.read(&mut rx_buf),
-                self.power_signal.next_message_pure(),
+                self.power_signal.listen(),
             )
             .await
             {
@@ -248,7 +254,7 @@ impl<'context, RW: 'static + BuildIo> RawIoPump<'context, RW> {
                 }
                 Either3::Third(result) => {
                     self.power_state = result;
-                    if !self.power_state {
+                    if self.power_state != PowerState::On {
                         break Ok(());
                     }
                 }
@@ -257,7 +263,7 @@ impl<'context, RW: 'static + BuildIo> RawIoPump<'context, RW> {
     }
 
     pub async fn low_power_pump(&mut self) {
-        self.power_state = self.power_signal.next_message_pure().await;
+        self.power_state = self.power_signal.listen().await;
     }
 }
 
@@ -269,7 +275,7 @@ impl<'context, RW: 'static + BuildIo> Pump for RawIoPump<'context, RW> {
 
     fn pump(&mut self) -> Self::Fut<'_> {
         async {
-            if self.power_state {
+            if self.power_state != PowerState::Off {
                 self.high_power_pump().await?;
             } else {
                 self.low_power_pump().await;
