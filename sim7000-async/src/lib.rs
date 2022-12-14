@@ -4,6 +4,7 @@
 // TODO: at_command should probably be moved to its own crate
 pub mod at_command;
 mod drop;
+mod error;
 pub mod gnss;
 pub mod modem;
 pub mod pump;
@@ -23,7 +24,8 @@ use embedded_io::asynch::{Read, Write};
 #[cfg(feature = "log")]
 pub(crate) use log;
 
-use at_command::SimError;
+pub use error::Error;
+
 use core::future::Future;
 
 pub trait SerialError {
@@ -46,22 +48,6 @@ pub trait SplitIo {
         Self: 'u;
 
     fn split(&mut self) -> (Self::Reader<'_>, Self::Writer<'_>);
-}
-
-#[derive(Debug)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
-pub enum Error {
-    InvalidUtf8,
-    BufferOverflow,
-    Sim(SimError),
-    Timeout,
-    Serial,
-}
-
-impl embedded_io::Error for Error {
-    fn kind(&self) -> embedded_io::ErrorKind {
-        embedded_io::ErrorKind::Other
-    }
 }
 
 #[derive(PartialEq, Eq)]
