@@ -7,6 +7,7 @@ use embedded_io::{
     asynch::{Read, Write},
     Io,
 };
+use futures::select_biased;
 use futures_util::FutureExt;
 
 use crate::{
@@ -188,7 +189,7 @@ impl<'s> Write for TcpWriter<'s> {
                 commands.send_bytes(chunk).await;
 
                 loop {
-                    futures::select_biased! {
+                    select_biased! {
                         _ = stream.handle_events().fuse() => unreachable!(),
                         event = events.next_message_pure().fuse() => match event {
                             ConnectionMessage::SendFail => return Err(TcpError::SendFail),
@@ -233,7 +234,7 @@ impl<'s> Read for TcpReader<'s> {
             loop {
                 log::trace!("tcp {} awaiting rx/event", stream.token.ordinal());
 
-                futures::select_biased! {
+                select_biased! {
                     _ = stream.handle_events().fuse() => unreachable!(),
                     n = stream.token.rx().read(buf).fuse() => {
                         log::trace!("tcp {} rx got {} bytes", stream.token.ordinal(), n);

@@ -25,6 +25,7 @@ use embedded_io::asynch::{Read, Write};
 pub(crate) use log;
 
 pub use error::Error;
+pub use modem::power::PowerState;
 
 use core::future::Future;
 
@@ -48,13 +49,6 @@ pub trait SplitIo {
         Self: 'u;
 
     fn split(&mut self) -> (Self::Reader<'_>, Self::Writer<'_>);
-}
-
-#[derive(PartialEq, Eq)]
-pub enum PowerState {
-    On,
-    Off,
-    Sleeping,
 }
 
 pub trait ModemPower {

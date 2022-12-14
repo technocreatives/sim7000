@@ -1,5 +1,6 @@
 mod command;
 mod context;
+pub mod power;
 
 use embassy_time::{with_timeout, Duration, Timer};
 
@@ -17,18 +18,17 @@ use crate::{
         unsolicited::{ConnectionMessage, RegistrationStatus},
         At, AtRequest, ConnectMode, NetworkMode,
     },
-    drop::{AsyncDrop, DropMessage},
     gnss::Gnss,
     pump::{DropPump, RawIoPump, RxPump, TxPump},
     read::ModemReader,
     tcp::{ConnectError, TcpStream},
     voltage::VoltageWarner,
-    BuildIo, Error, ModemPower,
+    BuildIo, Error, ModemPower, PowerState,
 };
 pub use command::{CommandRunner, CommandRunnerGuard, RawAtCommand};
 pub use context::*;
 
-use self::command::ExpectResponse;
+use self::{command::ExpectResponse, power::PowerSignalBroadcaster};
 
 pub struct Uninitialized;
 pub struct Disabled;
@@ -37,6 +37,7 @@ pub struct Sleeping;
 
 pub struct Modem<'c, P> {
     context: &'c ModemContext,
+    power_signal: PowerSignalBroadcaster<'c>,
     commands: CommandRunner<'c>,
     power: P,
 }
@@ -58,6 +59,7 @@ impl<'c, P: ModemPower> Modem<'c, P> {
     > {
         let modem = Modem {
             commands: context.commands(),
+            power_signal: context.power_signal.publisher(),
             context,
             power,
         };
@@ -66,8 +68,8 @@ impl<'c, P: ModemPower> Modem<'c, P> {
             io,
             rx: context.rx_pipe.writer(),
             tx: context.tx_pipe.reader(),
-            power_state: false,
-            power_signal: context.power_signal.dyn_subscriber().unwrap(),
+            power_state: PowerState::Off,
+            power_signal: context.power_signal.subscribe(),
         };
 
         let rx_pump = RxPump {
@@ -86,8 +88,8 @@ impl<'c, P: ModemPower> Modem<'c, P> {
 
         let drop_pump = DropPump {
             context,
-            power_signal: context.power_signal.dyn_subscriber().unwrap(),
-            power_state: false,
+            power_signal: context.power_signal.subscribe(),
+            power_state: PowerState::Off,
         };
 
         Ok((modem, io_pump, tx_pump, rx_pump, drop_pump))
@@ -95,9 +97,8 @@ impl<'c, P: ModemPower> Modem<'c, P> {
 
     pub async fn init(&mut self) -> Result<(), Error> {
         self.deactivate().await;
-        let publisher = self.context.power_signal.publisher().unwrap();
-        publisher.publish(true).await;
         self.power.enable().await;
+        self.power_signal.broadcast(PowerState::On).await;
 
         let commands = self.commands.lock().await;
 
@@ -157,16 +158,13 @@ impl<'c, P: ModemPower> Modem<'c, P> {
         }
         commands.run(configure_edrx).await?;
 
-        core::mem::drop(commands);
-        core::mem::drop(publisher);
+        drop(commands);
         self.deactivate().await;
         Ok(())
     }
 
     pub async fn activate(&mut self) -> Result<(), Error> {
-        // unwrap is fine here since the modem is the only code creating publishers, there will always be a free slot.
-        let publisher = self.context.power_signal.publisher().unwrap();
-        publisher.publish(true).await;
+        self.power_signal.broadcast(PowerState::On).await;
         self.power.enable().await;
         let set_flow_control = ifc::SetFlowControl {
             dce_by_dte: FlowControl::Hardware,
@@ -199,8 +197,7 @@ impl<'c, P: ModemPower> Modem<'c, P> {
     }
 
     pub async fn deactivate(&mut self) {
-        let publisher = self.context.power_signal.publisher().unwrap();
-        publisher.publish(false).await;
+        self.power_signal.broadcast(PowerState::Off).await;
         self.context.tcp.disconnect_all().await;
 
         self.power.disable().await;
@@ -271,7 +268,7 @@ impl<'c, P: ModemPower> Modem<'c, P> {
         Ok(TcpStream::new(
             tcp_context,
             &self.context.drop_channel,
-            self.commands.clone(),
+            self.context.commands(),
         ))
     }
 
@@ -295,10 +292,11 @@ impl<'c, P: ModemPower> Modem<'c, P> {
             })
             .await?;
 
-        Ok(Some(Gnss {
-            _drop: AsyncDrop::new(&self.context.drop_channel, DropMessage::Gnss),
+        Ok(Some(Gnss::new(
             reports,
-        }))
+            self.context.power_signal.subscribe(),
+            &self.context.drop_channel,
+        )))
     }
 
     pub async fn claim_voltage_warner(&mut self) -> Option<VoltageWarner<'c>> {
@@ -344,10 +342,12 @@ impl<'c, P: ModemPower> Modem<'c, P> {
     }
 
     pub async fn sleep(&mut self) {
+        self.power_signal.broadcast(PowerState::Sleeping).await;
         self.power.sleep().await;
     }
 
     pub async fn wake(&mut self) {
         self.power.wake().await;
+        self.power_signal.broadcast(PowerState::On).await;
     }
 }

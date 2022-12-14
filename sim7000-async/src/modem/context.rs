@@ -1,9 +1,9 @@
 use embassy_sync::{
     blocking_mutex::raw::CriticalSectionRawMutex, channel::Channel, mutex::Mutex, pipe::Pipe,
-    pubsub::PubSubChannel, signal::Signal,
+    signal::Signal,
 };
 
-use super::{CommandRunner, RawAtCommand};
+use super::{power::PowerSignal, CommandRunner, RawAtCommand};
 use crate::at_command::{
     unsolicited::{ConnectionMessage, GnssReport, RegistrationStatus, VoltageWarning},
     ResponseCode,
@@ -16,6 +16,7 @@ pub type TcpRxPipe = Pipe<CriticalSectionRawMutex, 3072>;
 pub type TcpEventChannel = Channel<CriticalSectionRawMutex, ConnectionMessage, 8>;
 
 pub struct ModemContext {
+    pub(crate) power_signal: PowerSignal<12>,
     pub(crate) command_lock: Mutex<CriticalSectionRawMutex, ()>,
     pub(crate) commands: Channel<CriticalSectionRawMutex, RawAtCommand, 4>,
     pub(crate) generic_response: Channel<CriticalSectionRawMutex, ResponseCode, 1>,
@@ -24,7 +25,6 @@ pub struct ModemContext {
     pub(crate) registration_events: Signal<CriticalSectionRawMutex, RegistrationStatus>,
     pub(crate) gnss_slot: Slot<Signal<CriticalSectionRawMutex, GnssReport>>,
     pub(crate) voltage_slot: Slot<Signal<CriticalSectionRawMutex, VoltageWarning>>,
-    pub(crate) power_signal: PubSubChannel<CriticalSectionRawMutex, bool, 4, 2, 1>,
     pub(crate) tx_pipe: Pipe<CriticalSectionRawMutex, 2048>,
     pub(crate) rx_pipe: Pipe<CriticalSectionRawMutex, 2048>,
 }
@@ -32,6 +32,7 @@ pub struct ModemContext {
 impl ModemContext {
     pub const fn new() -> Self {
         ModemContext {
+            power_signal: PowerSignal::new(),
             command_lock: Mutex::new(()),
             commands: Channel::new(),
             generic_response: Channel::new(),
@@ -40,7 +41,6 @@ impl ModemContext {
             registration_events: Signal::new(),
             gnss_slot: Slot::new(Signal::new()),
             voltage_slot: Slot::new(Signal::new()),
-            power_signal: PubSubChannel::new(),
             tx_pipe: Pipe::new(),
             rx_pipe: Pipe::new(),
         }
