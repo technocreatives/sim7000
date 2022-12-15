@@ -5,12 +5,16 @@ use embassy_sync::{
     channel::{Receiver, Sender},
     mutex::{Mutex, MutexGuard},
 };
+use embassy_time::{with_timeout, Duration, TimeoutError};
 use heapless::{String, Vec};
 
 use crate::at_command::{AtRequest, AtResponse, ResponseCode};
 use crate::log;
 use crate::modem::ModemContext;
 use crate::Error;
+
+/// The default timeout of AT commands
+pub const AT_DEFAULT_TIMEOUT: Duration = Duration::from_secs(5);
 
 pub enum RawAtCommand {
     Text(String<256>),
@@ -58,6 +62,7 @@ impl<'a> CommandRunner<'a> {
 pub struct CommandRunnerGuard<'a> {
     _commands_guard: MutexGuard<'a, CriticalSectionRawMutex, ()>,
     runner: &'a CommandRunner<'a>,
+    timeout: Option<Duration>,
 }
 
 impl<'a> CommandRunner<'a> {
@@ -65,31 +70,53 @@ impl<'a> CommandRunner<'a> {
         CommandRunnerGuard {
             _commands_guard: self.command_lock.lock().await,
             runner: self,
+            timeout: Some(AT_DEFAULT_TIMEOUT),
         }
     }
 }
 
 impl<'a> CommandRunnerGuard<'a> {
-    pub async fn send_request<C: AtRequest>(&self, request: &C) {
-        self.runner.commands.send(request.encode().into()).await;
+    /// Run a future with the timeout configured for self
+    async fn timeout<T, F: Future<Output = T>>(&self, future: F) -> Result<T, TimeoutError> {
+        Ok(match self.timeout {
+            Some(timeout) => with_timeout(timeout, future).await?,
+            None => future.await,
+        })
     }
 
-    pub async fn expect_response<T: AtResponse>(&self) -> Result<T, Error> {
-        loop {
-            let response = self.runner.responses.recv().await;
+    /// Send a request to the modem, but do not wait for a response.
+    pub async fn send_request<R: AtRequest>(&self, request: &R) -> Result<(), TimeoutError> {
+        self.timeout(async {
+            defmt::debug!("sending request: {:?}", request);
+            self.runner.commands.send(request.encode().into()).await;
+            defmt::debug!("request sent: {:?}", request);
+        })
+        .await
+    }
 
-            match T::from_generic(response) {
-                Ok(response) => return Ok(response),
-                Err(ResponseCode::Error(error)) => return Err(Error::Sim(error)),
-                Err(unknown_response) => {
-                    // TODO: we might want to make this a hard error, if/when we feel confident in
-                    // how both the driver and the modem behaves
-                    log::warn!("Got unexpected ATResponse: {:?}", unknown_response)
+    /// Wait for the modem to return a specific response.
+    pub async fn expect_response<T: AtResponse>(&self) -> Result<T, Error> {
+        self.timeout(async {
+            defmt::debug!("expecting response: {}", core::any::type_name::<T>());
+            loop {
+                let response = self.runner.responses.recv().await;
+                defmt::debug!("got response: {}", core::any::type_name::<T>());
+
+                match T::from_generic(response) {
+                    Ok(response) => return Ok(response),
+                    Err(ResponseCode::Error(error)) => return Err(Error::Sim(error)),
+                    Err(unknown_response) => {
+                        // TODO: we might want to make this a hard error, if/when we feel confident in
+                        // how both the driver and the modem behaves
+                        log::warn!("Got unexpected ATResponse: {:?}", unknown_response)
+                    }
                 }
             }
-        }
+        })
+        .await?
     }
 
+    /// Send raw bytes to the modem, use with care.
     pub async fn send_bytes(&self, mut bytes: &[u8]) {
         while !bytes.is_empty() {
             let mut chunk = Vec::new();
@@ -100,12 +127,13 @@ impl<'a> CommandRunnerGuard<'a> {
         }
     }
 
-    pub async fn run<C, Response>(&self, command: C) -> Result<Response, Error>
+    /// Send a request to the modem, and wait for the modem to respond.
+    pub async fn run<Request, Response>(&self, command: Request) -> Result<Response, Error>
     where
-        C: AtRequest<Response = Response>,
+        Request: AtRequest<Response = Response>,
         Response: ExpectResponse,
     {
-        self.send_request(&command).await;
+        self.send_request(&command).await?;
         let result = Response::expect(self).await;
 
         if let Err(e) = &result {
@@ -113,6 +141,13 @@ impl<'a> CommandRunnerGuard<'a> {
         }
 
         result
+    }
+
+    /// Set the timeout of commands
+    ///
+    /// Note that the timeout defaults to [AT_DEFAULT_TIMEOUT].
+    pub fn with_timeout(self, timeout: Option<Duration>) -> Self {
+        Self { timeout, ..self }
     }
 }
 
