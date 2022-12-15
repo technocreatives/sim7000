@@ -20,7 +20,7 @@ impl<'context> ModemReader<'context> {
 
     pub async fn read_line(&mut self) -> Result<String<256>, Error> {
         const MODEM_INPUT_PROMPT: &str = "> ";
-        const CRLF: &str = "\r\n";
+        const LINE_END: &str = "\n";
         loop {
             if !self.buffer.is_empty() {
                 match from_utf8(&self.buffer) {
@@ -42,12 +42,12 @@ impl<'context> ModemReader<'context> {
                 return Ok(MODEM_INPUT_PROMPT.into());
             } else if let Some(position) = self
                 .buffer
-                .windows(CRLF.len())
-                .position(|slice| slice == CRLF.as_bytes())
+                .windows(LINE_END.len())
+                .position(|slice| slice == LINE_END.as_bytes())
             {
-                // If we see a line break, the modem has probaly sent us a message
+                // If we see a line break, the modem has probably sent us a message
 
-                let line_end = position + CRLF.len();
+                let line_end = position + LINE_END.len();
                 let line = match from_utf8(&self.buffer[..position]).map_err(|_| Error::InvalidUtf8)
                 {
                     Ok(line) => line,
@@ -59,8 +59,8 @@ impl<'context> ModemReader<'context> {
                 };
                 log::trace!("RECV LINE: {:?}", line);
 
-                // Ignore empty lines, as well as echoed lines ending with just a CR
-                if line.trim().is_empty() || line.ends_with('\r') {
+                // Ignore empty lines, as well as echoed lines (which end with \r\r\n)
+                if line.trim().is_empty() || line.ends_with("\r\r") {
                     self.buffer.rotate_left(line_end);
                     self.buffer.truncate(self.buffer.len() - line_end);
 
@@ -77,8 +77,11 @@ impl<'context> ModemReader<'context> {
                 return Ok(line);
             }
 
-            if self.buffer.capacity() - self.buffer.len() == 0 {
-                panic!();
+            if self.buffer.capacity() == self.buffer.len() {
+                panic!(
+                    "read buffer is full, this should never happen. contents: {:?}",
+                    self.buffer.as_slice()
+                );
             }
 
             let mut buf = [0u8; 256];
