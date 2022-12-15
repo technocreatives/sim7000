@@ -71,7 +71,7 @@ pub enum Urc {
 
 impl AtParseLine for Urc {
     fn from_line(line: &str) -> Result<Self, AtParseErr> {
-        /// Create a function that tries to parse the line into an Urc::T
+        /// Returns a function that tries to parse the line into a Urc::T
         fn parse<'a, T: AtParseLine>(
             line: &'a str,
             f: impl Fn(T) -> Urc + 'a,
