@@ -110,7 +110,7 @@ pub enum ResponseCode {
 
 impl AtParseLine for ResponseCode {
     fn from_line(line: &str) -> Result<Self, AtParseErr> {
-        /// Create a function that tries to parse the line into an Urc::T
+        /// Returns a function that tries to parse the line into a ResponseCode::T
         fn parse<'a, T: AtParseLine>(
             line: &'a str,
             f: impl Fn(T) -> ResponseCode + 'a,
