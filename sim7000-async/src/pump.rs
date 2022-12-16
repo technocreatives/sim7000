@@ -194,12 +194,13 @@ impl<'context> Pump for DropPump<'context> {
                                 let mut runner = runner.lock().await;
                                 drop_message.run(&mut runner).await
                             }.fuse() => {
-                                // perform clean-up regardless of whether drop command succeeded
-                                drop_message.clean_up(self.context);
                                 result?;
                             }
                         }
                     }
+
+                    // perform clean-up regardless of whether drop command ran
+                    drop_message.clean_up(self.context);
                 },
             }
 
