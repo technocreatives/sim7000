@@ -21,7 +21,6 @@ pub struct Connect {
     pub mode: ConnectMode,
 
     /// IP or domain name
-    #[cfg_attr(feature = "defmt", defmt(Debug2Format))]
     pub destination: String<100>,
 
     pub port: u16,

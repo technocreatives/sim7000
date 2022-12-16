@@ -7,13 +7,8 @@ use super::{AtRequest, GenericOk};
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[cfg_attr(not(feature = "defmt"), derive(Debug))]
 pub struct StartTask {
-    #[cfg_attr(feature = "defmt", defmt(Debug2Format))]
     pub apn: String<50>,
-
-    #[cfg_attr(feature = "defmt", defmt(Debug2Format))]
     pub username: String<50>,
-
-    #[cfg_attr(feature = "defmt", defmt(Debug2Format))]
     pub password: String<50>,
 }
 

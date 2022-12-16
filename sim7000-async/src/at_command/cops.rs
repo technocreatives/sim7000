@@ -13,10 +13,7 @@ pub struct GetOperatorInfo;
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct OperatorInfo {
     pub mode: OperatorMode,
-
     pub format: OperatorFormat,
-
-    #[cfg_attr(feature = "defmt", defmt(Debug2Format))]
     pub operator_name: heapless::String<256>,
 }
 
