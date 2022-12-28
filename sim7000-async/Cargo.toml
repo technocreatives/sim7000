@@ -15,7 +15,7 @@ embassy-executor = { git = "https://github.com/embassy-rs/embassy", rev = "b9953
 embassy-time = { git = "https://github.com/embassy-rs/embassy", rev = "b99533607ceed225dd12ae73aaa9a0d969a7365e", features = ["nightly"] }
 embassy-futures = { git = "https://github.com/embassy-rs/embassy", rev = "b99533607ceed225dd12ae73aaa9a0d969a7365e" }
 embedded-io = "0.3.0"
-heapless = { version = "0.7", features = ["defmt-impl"] }
+heapless = "0.7"
 futures-util = { version = "0.3", default-features = false }
 futures = { version = "0.3", default-features = false, features = ["async-await"] }
 log = { version = "0.4", optional = true }
