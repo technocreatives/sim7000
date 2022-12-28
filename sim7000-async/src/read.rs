@@ -48,14 +48,10 @@ impl<'context> ModemReader<'context> {
                 // If we see a line break, the modem has probably sent us a message
 
                 let line_end = position + LINE_END.len();
-                let line = match from_utf8(&self.buffer[..position]).map_err(|_| Error::InvalidUtf8)
-                {
-                    Ok(line) => line,
-                    Err(err) => {
-                        self.buffer.rotate_left(line_end);
-                        self.buffer.truncate(self.buffer.len() - line_end);
-                        return Err(err);
-                    }
+                let Ok(line) = from_utf8(&self.buffer[..position]) else {
+                    self.buffer.rotate_left(line_end);
+                    self.buffer.truncate(self.buffer.len() - line_end);
+                    return Err(Error::InvalidUtf8);
                 };
                 log::trace!("RECV LINE: {:?}", line);
 

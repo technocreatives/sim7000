@@ -273,9 +273,8 @@ impl<'c, P: ModemPower> Modem<'c, P> {
     }
 
     pub async fn claim_gnss(&mut self) -> Result<Option<Gnss<'c>>, Error> {
-        let reports = match self.context.gnss_slot.claim() {
-            Some(reports) => reports,
-            None => return Ok(None),
+        let Some(reports) = self.context.gnss_slot.claim() else {
+            return Ok(None);
         };
 
         self.commands
