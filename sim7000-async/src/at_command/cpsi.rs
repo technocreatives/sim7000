@@ -5,8 +5,8 @@ use crate::util::collect_array;
 use super::{AtParseErr, AtParseLine, AtRequest, AtResponse, GenericOk, ResponseCode};
 
 /// AT+CPSI?
+#[derive(Debug)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
-#[cfg_attr(not(feature = "defmt"), derive(Debug))]
 pub struct GetSystemInfo;
 
 impl AtRequest for GetSystemInfo {

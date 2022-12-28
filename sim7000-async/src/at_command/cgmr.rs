@@ -14,8 +14,8 @@ const MAX_VERSION_LEN: usize = 32;
 ///
 /// Gets the "product software version identification text", i.e. some kind of
 /// identifier for the version of the firmware running on the modem.
+#[derive(Debug)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
-#[cfg_attr(not(feature = "defmt"), derive(Debug))]
 pub struct GetFwVersion;
 
 impl AtRequest for GetFwVersion {

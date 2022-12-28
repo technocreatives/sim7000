@@ -4,18 +4,16 @@ use heapless::String;
 use super::{AtRequest, GenericOk};
 
 /// AT+IFC=...
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
-#[cfg_attr(not(feature = "defmt"), derive(Debug))]
 pub struct SetFlowControl {
     pub dce_by_dte: FlowControl,
     pub dte_by_dce: FlowControl,
 }
 
 #[repr(u8)]
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
-#[cfg_attr(not(feature = "defmt"), derive(Debug))]
 pub enum FlowControl {
     NoFlowControl = 0,
     Software = 1,

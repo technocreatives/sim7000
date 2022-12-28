@@ -77,7 +77,7 @@ pub(crate) trait AtParseLine: Sized {
 }
 
 #[cfg(feature = "defmt")]
-pub trait AtRequest: defmt::Format {
+pub trait AtRequest: Debug + defmt::Format {
     type Response;
     fn encode(&self) -> heapless::String<256>;
 }
