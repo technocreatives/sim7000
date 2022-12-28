@@ -4,9 +4,8 @@ use heapless::String;
 use super::{AtRequest, GenericOk};
 
 #[repr(u8)]
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
-#[cfg_attr(not(feature = "defmt"), derive(Debug))]
 pub enum EDRXSetting {
     Disable = 0,
     Enable = 1,
@@ -14,18 +13,16 @@ pub enum EDRXSetting {
 }
 
 #[repr(u8)]
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
-#[cfg_attr(not(feature = "defmt"), derive(Debug))]
 pub enum AcTType {
     CatM = 4,
     NbIot = 5,
 }
 
 /// AT+CEDRX=...
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
-#[cfg_attr(not(feature = "defmt"), derive(Debug))]
 pub struct ConfigureEDRX {
     pub n: EDRXSetting,
     pub act_type: AcTType,

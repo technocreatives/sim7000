@@ -4,9 +4,8 @@ use heapless::String;
 use super::{AtRequest, GenericOk};
 
 #[repr(u8)]
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
-#[cfg_attr(not(feature = "defmt"), derive(Debug))]
 pub enum RiPinMode {
     Off = 0,
     On = 1,
@@ -14,8 +13,8 @@ pub enum RiPinMode {
 }
 
 /// AT+CFGRI=...
+#[derive(Debug)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
-#[cfg_attr(not(feature = "defmt"), derive(Debug))]
 pub struct ConfigureRiPin(pub RiPinMode);
 
 impl AtRequest for ConfigureRiPin {

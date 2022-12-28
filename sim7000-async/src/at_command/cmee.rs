@@ -4,9 +4,8 @@ use heapless::String;
 use super::{AtRequest, GenericOk};
 
 #[repr(u8)]
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
-#[cfg_attr(not(feature = "defmt"), derive(Debug))]
 pub enum CMEErrorMode {
     Disable = 0,
     Numeric = 1,
@@ -14,8 +13,8 @@ pub enum CMEErrorMode {
 }
 
 /// AT+CMEE=...
+#[derive(Debug)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
-#[cfg_attr(not(feature = "defmt"), derive(Debug))]
 pub struct ConfigureCMEErrors(pub CMEErrorMode);
 
 impl AtRequest for ConfigureCMEErrors {

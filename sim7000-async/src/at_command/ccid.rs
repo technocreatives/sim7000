@@ -2,8 +2,9 @@ use heapless::String;
 
 use super::{AtParseErr, AtParseLine, AtRequest, AtResponse, GenericOk, ResponseCode};
 
+/// AT+CCID
+#[derive(Debug)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
-#[cfg_attr(not(feature = "defmt"), derive(Debug))]
 pub struct ShowIccid;
 
 impl AtRequest for ShowIccid {

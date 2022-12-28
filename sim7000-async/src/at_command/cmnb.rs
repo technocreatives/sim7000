@@ -4,9 +4,8 @@ use heapless::String;
 use super::{AtRequest, GenericOk};
 
 #[repr(u8)]
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
-#[cfg_attr(not(feature = "defmt"), derive(Debug))]
 pub enum NbMode {
     CatM = 1,
     NbIot = 2,
@@ -14,8 +13,8 @@ pub enum NbMode {
 }
 
 /// AT+CMNB=...
+#[derive(Debug)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
-#[cfg_attr(not(feature = "defmt"), derive(Debug))]
 pub struct SetNbMode(pub NbMode);
 
 impl AtRequest for SetNbMode {

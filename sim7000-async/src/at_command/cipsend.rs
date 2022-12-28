@@ -4,8 +4,8 @@ use heapless::String;
 use super::{AtRequest, WritePrompt};
 
 /// AT+CIPSEND
+#[derive(Debug)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
-#[cfg_attr(not(feature = "defmt"), derive(Debug))]
 pub struct IpSend {
     pub connection: usize,
     pub data_length: usize,

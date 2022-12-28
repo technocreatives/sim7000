@@ -3,7 +3,8 @@ use embassy_sync::{
     pubsub::{DynImmediatePublisher, DynSubscriber, PubSubBehavior, PubSubChannel},
 };
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum PowerState {
     On,
     Off,

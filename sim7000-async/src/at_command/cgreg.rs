@@ -7,9 +7,8 @@ use super::{AtRequest, GenericOk};
 ///
 /// Configure network registration URC
 #[repr(u8)]
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
-#[cfg_attr(not(feature = "defmt"), derive(Debug))]
 pub enum ConfigureRegistrationUrc {
     /// Disable URC
     Disable = 0,
@@ -24,8 +23,8 @@ pub enum ConfigureRegistrationUrc {
 }
 
 /// AT+CGREG?
+#[derive(Debug)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
-#[cfg_attr(not(feature = "defmt"), derive(Debug))]
 pub struct GetRegistrationStatus;
 
 impl AtRequest for ConfigureRegistrationUrc {

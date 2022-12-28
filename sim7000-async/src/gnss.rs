@@ -9,8 +9,8 @@ use crate::PowerState;
 
 pub const GNSS_SLOTS: usize = 1;
 
+#[derive(Debug)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
-#[cfg_attr(not(feature = "defmt"), derive(Debug))]
 pub struct Closed;
 
 pub struct Gnss<'c> {
