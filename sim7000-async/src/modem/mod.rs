@@ -213,15 +213,7 @@ impl<'c, P: ModemPower> Modem<'c, P> {
 
     async fn wait_for_registration(&self, commands: &CommandRunnerGuard<'_>) -> Result<(), Error> {
         loop {
-            if with_timeout(Duration::from_millis(2000), async {
-                commands.run(cgreg::GetRegistrationStatus).await
-            })
-            .await
-            .is_err()
-            {
-                continue;
-            }
-
+            commands.run(cgreg::GetRegistrationStatus).await?;
             match self.context.registration_events.wait().await {
                 RegistrationStatus::RegisteredHome | RegistrationStatus::RegisteredRoaming => break,
                 _ => Timer::after(Duration::from_millis(200)).await,
