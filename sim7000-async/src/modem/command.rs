@@ -87,9 +87,7 @@ impl<'a> CommandRunnerGuard<'a> {
     /// Send a request to the modem, but do not wait for a response.
     pub async fn send_request<R: AtRequest>(&self, request: &R) -> Result<(), TimeoutError> {
         self.timeout(async {
-            defmt::debug!("sending request: {:?}", request);
             self.runner.commands.send(request.encode().into()).await;
-            defmt::debug!("request sent: {:?}", request);
         })
         .await
     }
@@ -97,10 +95,8 @@ impl<'a> CommandRunnerGuard<'a> {
     /// Wait for the modem to return a specific response.
     pub async fn expect_response<T: AtResponse>(&self) -> Result<T, Error> {
         self.timeout(async {
-            defmt::debug!("expecting response: {}", core::any::type_name::<T>());
             loop {
                 let response = self.runner.responses.recv().await;
-                defmt::debug!("got response: {}", core::any::type_name::<T>());
 
                 match T::from_generic(response) {
                     Ok(response) => return Ok(response),
