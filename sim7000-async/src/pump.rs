@@ -184,23 +184,25 @@ impl<'context> Pump for DropPump<'context> {
                 drop_message = self.context.drop_channel.recv().fuse() => {
                     if self.power_state == PowerState::On {
                         // run drop command, abort if power state changes
-                        select_biased! {
+                        let result = select_biased! {
                             power_state = self.power_signal.listen().fuse() => {
                                 self.power_state = power_state;
+                                Ok(())
                             }
                             result = async {
                                 // run drop command
                                 let runner = self.context.commands();
                                 let mut runner = runner.lock().await;
                                 drop_message.run(&mut runner).await
-                            }.fuse() => {
-                                result?;
-                            }
-                        }
-                    }
+                            }.fuse() => result,
+                        };
 
-                    // perform clean-up regardless of whether drop command ran
-                    drop_message.clean_up(self.context);
+                        // clean up regardless of whether drop command succeeded
+                        drop_message.clean_up(self.context);
+                        result?;
+                    } else {
+                        drop_message.clean_up(self.context);
+                    }
                 },
             }
 
