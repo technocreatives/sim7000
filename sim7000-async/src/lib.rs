@@ -1,5 +1,9 @@
 #![no_std]
 #![feature(type_alias_impl_trait)]
+#![allow(clippy::unnecessary_lazy_evaluations)]
+#![allow(clippy::single_component_path_imports)]
+// large enum variants are unavoidable in no_std, since we can't box things
+#![allow(clippy::large_enum_variant, clippy::result_large_err)]
 
 // TODO: at_command should probably be moved to its own crate
 pub mod at_command;
