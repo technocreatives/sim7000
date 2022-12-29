@@ -33,6 +33,9 @@ pub enum TcpError {
 pub enum ConnectError {
     ConnectFailed,
     Other(crate::Error),
+
+    /// The modem gave an unexpected response
+    Unexpected(ConnectionMessage),
 }
 
 impl embedded_io::Error for TcpError {
