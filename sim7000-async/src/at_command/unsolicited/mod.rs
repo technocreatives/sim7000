@@ -3,8 +3,12 @@
 use super::{AtParseErr, AtParseLine};
 
 mod app_pdp;
+mod cbm;
+mod cds;
 mod cfun;
 mod cgreg;
+mod cmt;
+mod cmti;
 mod connection;
 mod cpin;
 mod creg;
@@ -24,8 +28,12 @@ mod ugnsinf;
 mod voltage_warning;
 
 pub use app_pdp::AppNetworkActive;
+pub use cbm::Cbm;
+pub use cds::Cds;
 pub use cfun::CFun;
 pub use cgreg::RegistrationStatus;
+pub use cmt::Cmt;
+pub use cmti::Cmti;
 pub use connection::{Connection, ConnectionMessage};
 pub use cpin::CPin;
 pub use creg::CReg;
@@ -49,7 +57,11 @@ pub use voltage_warning::VoltageWarning;
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum Urc {
     AppNetworkActive(AppNetworkActive),
+    Cbm(Cbm),
+    Cds(Cds),
     CFun(CFun),
+    Cmt(Cmt),
+    Cmti(Cmti),
     CPin(CPin),
     CReg(CReg),
     CRing(CRing),
@@ -81,7 +93,11 @@ impl AtParseLine for Urc {
 
         Err(AtParseErr::default())
             .or_else(parse(line, Urc::AppNetworkActive))
+            .or_else(parse(line, Urc::Cbm))
+            .or_else(parse(line, Urc::Cds))
             .or_else(parse(line, Urc::CFun))
+            .or_else(parse(line, Urc::Cmt))
+            .or_else(parse(line, Urc::Cmti))
             .or_else(parse(line, Urc::CPin))
             .or_else(parse(line, Urc::CReg))
             .or_else(parse(line, Urc::CRing))
