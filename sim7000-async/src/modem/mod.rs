@@ -43,6 +43,8 @@ pub struct Modem<'c, P> {
     power: P,
 }
 
+const MODEM_POWER_TIMEOUT: Duration = Duration::from_secs(30);
+
 impl<'c, P: ModemPower> Modem<'c, P> {
     pub async fn new<I: BuildIo>(
         io: I,
@@ -98,7 +100,7 @@ impl<'c, P: ModemPower> Modem<'c, P> {
 
     pub async fn init(&mut self) -> Result<(), Error> {
         self.deactivate().await;
-        self.power.enable().await;
+        with_timeout(MODEM_POWER_TIMEOUT, self.power.enable()).await?;
         self.power_signal.broadcast(PowerState::On).await;
 
         let commands = self.commands.lock().await;
@@ -166,7 +168,7 @@ impl<'c, P: ModemPower> Modem<'c, P> {
 
     pub async fn activate(&mut self) -> Result<(), Error> {
         self.power_signal.broadcast(PowerState::On).await;
-        self.power.enable().await;
+        with_timeout(MODEM_POWER_TIMEOUT, self.power.enable()).await?;
         let set_flow_control = ifc::SetFlowControl {
             dce_by_dte: FlowControl::Hardware,
             dte_by_dce: FlowControl::Hardware,
@@ -201,7 +203,12 @@ impl<'c, P: ModemPower> Modem<'c, P> {
         self.power_signal.broadcast(PowerState::Off).await;
         self.context.tcp.disconnect_all().await;
 
-        self.power.disable().await;
+        if with_timeout(MODEM_POWER_TIMEOUT, self.power.disable())
+            .await
+            .is_err()
+        {
+            log::warn!("timeout while powering off the modem");
+        }
     }
 
     async fn wait_for_registration(&self, commands: &CommandRunnerGuard<'_>) -> Result<(), Error> {
