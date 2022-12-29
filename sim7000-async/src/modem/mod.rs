@@ -2,11 +2,11 @@ mod command;
 mod context;
 pub mod power;
 
-use embassy_time::{with_timeout, Duration, Timer};
+use embassy_time::{with_timeout, Duration, TimeoutError, Timer};
 
 use crate::{
     at_command::{
-        ate, cbatchk, ccid,
+        at, ate, cbatchk, ccid,
         cedrxs::{self, AcTType, EDRXSetting},
         cfgri::{self, RiPinMode},
         cgmr, cgnspwr, cgnsurc, cgreg, cifsrex, ciicr, cipmux, cipshut, cipstart,
@@ -19,6 +19,7 @@ use crate::{
         At, AtRequest, ConnectMode, NetworkMode,
     },
     gnss::Gnss,
+    log,
     pump::{DropPump, RawIoPump, RxPump, TxPump},
     read::ModemReader,
     tcp::{ConnectError, TcpStream},
@@ -257,19 +258,33 @@ impl<'c, P: ModemPower> Modem<'c, P> {
             })
             .await?;
 
-        loop {
-            match tcp_context.events().recv().await {
-                ConnectionMessage::Connected => break,
-                ConnectionMessage::ConnectionFailed => return Err(ConnectError::ConnectFailed),
-                _ => {}
+        // Wait for a response.
+        // Based on testing, a connection will timeout after ~120 seconds, so we add our own
+        // timeout to this step to prevent us from waiting forever if the modem died.
+        for _ in 0..21 {
+            match with_timeout(Duration::from_secs(6), tcp_context.events().recv()).await {
+                Err(TimeoutError) => {
+                    // Make sure the modem is still responding to commands.
+                    self.commands.lock().await.run(at::At).await?;
+                }
+
+                Ok(ConnectionMessage::Connected) => {
+                    return Ok(TcpStream::new(
+                        tcp_context,
+                        &self.context.drop_channel,
+                        self.context.commands(),
+                    ));
+                }
+
+                Ok(ConnectionMessage::ConnectionFailed) => return Err(ConnectError::ConnectFailed),
+
+                // This should never happen, since we guard against connections already being used.
+                Ok(msg) => return Err(ConnectError::Unexpected(msg)),
             }
         }
 
-        Ok(TcpStream::new(
-            tcp_context,
-            &self.context.drop_channel,
-            self.context.commands(),
-        ))
+        // The modem never got back to us, it probably died.
+        Err(ConnectError::Other(Error::Timeout))
     }
 
     pub async fn claim_gnss(&mut self) -> Result<Option<Gnss<'c>>, Error> {
