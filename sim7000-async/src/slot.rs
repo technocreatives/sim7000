@@ -37,8 +37,8 @@ impl<T: 'static> Slot<T> {
         }
     }
 
-    pub fn is_free(&self) -> bool {
-        !self.is_claimed.fetch_or(false, Ordering::Relaxed)
+    pub fn is_claimed(&self) -> bool {
+        self.is_claimed.load(Ordering::Relaxed)
     }
 }
 

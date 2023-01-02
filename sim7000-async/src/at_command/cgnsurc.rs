@@ -7,7 +7,7 @@ use super::{AtRequest, GenericOk};
 #[derive(Debug)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct ConfigureGnssUrc {
-    /// Send URC report every <n> GNSS fix.
+    /// Send URC report every `n` GNSS fix.
     /// Set to 0 to disable.
     pub period: u8,
 }

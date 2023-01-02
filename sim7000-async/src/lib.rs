@@ -18,6 +18,8 @@ pub mod tcp;
 mod util;
 pub mod voltage;
 
+pub use util::*;
+
 #[cfg(all(feature = "log", feature = "defmt"))]
 compile_error!("'log' and 'defmt' features are mutually exclusive");
 #[cfg(not(any(feature = "log", feature = "defmt")))]

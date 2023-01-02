@@ -2,21 +2,21 @@ mod command;
 mod context;
 pub mod power;
 
-use embassy_time::{with_timeout, Duration, TimeoutError, Timer};
+use embassy_time::{with_timeout, Duration, Timer};
 
 use crate::{
     at_command::{
-        at, ate, cbatchk, ccid,
+        ate, cbatchk, ccid,
         cedrxs::{self, AcTType, EDRXSetting},
         cfgri::{self, RiPinMode},
-        cgmr, cgnspwr, cgnsurc, cgreg, cifsrex, ciicr, cipmux, cipshut, cipstart,
+        cgmr, cgnspwr, cgnsurc, cgreg, cifsrex, ciicr, cipmux, cipshut,
         cmee::{self, CMEErrorMode},
         cmnb::{self, NbMode},
         cnmp, cops, cpsi, csclk, csq, cstt,
         ifc::{self, FlowControl},
         ipr::{self, BaudRate},
-        unsolicited::{ConnectionMessage, RegistrationStatus},
-        At, AtRequest, ConnectMode, NetworkMode,
+        unsolicited::RegistrationStatus,
+        At, AtRequest, NetworkMode,
     },
     gnss::Gnss,
     log,
@@ -26,7 +26,7 @@ use crate::{
     voltage::VoltageWarner,
     BuildIo, Error, ModemPower, PowerState,
 };
-pub use command::{CommandRunner, CommandRunnerGuard, RawAtCommand};
+pub use command::{CommandRunner, CommandRunnerGuard, RawAtCommand, AT_DEFAULT_TIMEOUT};
 pub use context::*;
 
 use self::{command::ExpectResponse, power::PowerSignalBroadcaster};
@@ -101,7 +101,7 @@ impl<'c, P: ModemPower> Modem<'c, P> {
     pub async fn init(&mut self) -> Result<(), Error> {
         self.deactivate().await;
         with_timeout(MODEM_POWER_TIMEOUT, self.power.enable()).await?;
-        self.power_signal.broadcast(PowerState::On).await;
+        self.power_signal.broadcast(PowerState::On);
 
         let commands = self.commands.lock().await;
 
@@ -167,7 +167,7 @@ impl<'c, P: ModemPower> Modem<'c, P> {
     }
 
     pub async fn activate(&mut self) -> Result<(), Error> {
-        self.power_signal.broadcast(PowerState::On).await;
+        self.power_signal.broadcast(PowerState::On);
         with_timeout(MODEM_POWER_TIMEOUT, self.power.enable()).await?;
         let set_flow_control = ifc::SetFlowControl {
             dce_by_dte: FlowControl::Hardware,
@@ -200,7 +200,7 @@ impl<'c, P: ModemPower> Modem<'c, P> {
     }
 
     pub async fn deactivate(&mut self) {
-        self.power_signal.broadcast(PowerState::Off).await;
+        self.power_signal.broadcast(PowerState::Off);
         self.context.tcp.disconnect_all().await;
 
         if with_timeout(MODEM_POWER_TIMEOUT, self.power.disable())
@@ -245,45 +245,14 @@ impl<'c, P: ModemPower> Modem<'c, P> {
         port: u16,
     ) -> Result<TcpStream<'c>, ConnectError> {
         let tcp_context = self.context.tcp.claim().unwrap();
-
-        self.commands
-            .lock()
-            .await
-            .run(cipstart::Connect {
-                mode: ConnectMode::Tcp,
-                number: tcp_context.ordinal(),
-                destination: host.try_into().map_err(|_| Error::BufferOverflow)?,
-                port,
-            })
-            .await?;
-
-        // Wait for a response.
-        // Based on testing, a connection will timeout after ~120 seconds, so we add our own
-        // timeout to this step to prevent us from waiting forever if the modem died.
-        for _ in 0..21 {
-            match with_timeout(Duration::from_secs(6), tcp_context.events().recv()).await {
-                Err(TimeoutError) => {
-                    // Make sure the modem is still responding to commands.
-                    self.commands.lock().await.run(at::At).await?;
-                }
-
-                Ok(ConnectionMessage::Connected) => {
-                    return Ok(TcpStream::new(
-                        tcp_context,
-                        &self.context.drop_channel,
-                        self.context.commands(),
-                    ));
-                }
-
-                Ok(ConnectionMessage::ConnectionFailed) => return Err(ConnectError::ConnectFailed),
-
-                // This should never happen, since we guard against connections already being used.
-                Ok(msg) => return Err(ConnectError::Unexpected(msg)),
-            }
-        }
-
-        // The modem never got back to us, it probably died.
-        Err(ConnectError::Other(Error::Timeout))
+        TcpStream::connect(
+            tcp_context,
+            host,
+            port,
+            &self.context.drop_channel,
+            self.context.commands(),
+        )
+        .await
     }
 
     pub async fn claim_gnss(&mut self) -> Result<Option<Gnss<'c>>, Error> {
@@ -355,12 +324,12 @@ impl<'c, P: ModemPower> Modem<'c, P> {
     }
 
     pub async fn sleep(&mut self) {
-        self.power_signal.broadcast(PowerState::Sleeping).await;
+        self.power_signal.broadcast(PowerState::Sleeping);
         self.power.sleep().await;
     }
 
     pub async fn wake(&mut self) {
         self.power.wake().await;
-        self.power_signal.broadcast(PowerState::On).await;
+        self.power_signal.broadcast(PowerState::On);
     }
 }

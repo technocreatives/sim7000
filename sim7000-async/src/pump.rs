@@ -91,11 +91,8 @@ impl<'context> Pump for RxPump<'context> {
                         log::debug!("Done sending to tcp connection {}", connection);
                     }
                     Urc::ConnectionMessage(message) => {
-                        self.tcp.slots[message.index]
-                            .peek()
-                            .events
-                            .send(message.message)
-                            .await;
+                        let slot = &self.tcp.slots[message.index];
+                        slot.peek().events.send(message.message);
                     }
                     Urc::GnssReport(report) => {
                         self.gnss.signal(report);

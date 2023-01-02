@@ -1,8 +1,10 @@
+use cipstart::ConnectMode;
 use core::{
     future::Future,
     sync::atomic::{AtomicBool, Ordering},
 };
 use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, pubsub::PubSubChannel};
+use embassy_time::{with_timeout, Duration, TimeoutError, Timer};
 use embedded_io::{
     asynch::{Read, Write},
     Io,
@@ -11,10 +13,12 @@ use futures::select_biased;
 use futures_util::FutureExt;
 
 use crate::{
-    at_command::{cipsend, unsolicited::ConnectionMessage},
+    at_command::{at, cipsend, cipstart, unsolicited::ConnectionMessage, At},
     drop::{AsyncDrop, DropChannel, DropMessage},
     log,
     modem::{CommandRunner, TcpToken},
+    util::Lagged,
+    Error,
 };
 
 /// The maximum number of parallel connections supported by the modem
@@ -54,8 +58,15 @@ pub struct TcpStream<'s> {
     token: TcpToken<'s>,
     _drop: AsyncDrop<'s>,
     commands: CommandRunner<'s>,
+
+    /// Whether the stream is closed
     closed: AtomicBool,
+
+    /// A channel to proxy ConnectionMessages to both the TcpWriter and TcpReader.
     events: PubSubChannel<CriticalSectionRawMutex, ConnectionMessage, 1, 2, 2>,
+
+    /// Timeout of read/write operations
+    timeout: Duration,
 }
 
 pub struct TcpReader<'s> {
@@ -66,13 +77,13 @@ pub struct TcpWriter<'s> {
     stream: &'s TcpStream<'s>,
 }
 
-impl<'s> Io for TcpStream<'s> {
+impl Io for TcpStream<'_> {
     type Error = TcpError;
 }
-impl<'s> Io for TcpWriter<'s> {
+impl Io for TcpWriter<'_> {
     type Error = TcpError;
 }
-impl<'s> Io for TcpReader<'s> {
+impl Io for TcpReader<'_> {
     type Error = TcpError;
 }
 
@@ -85,20 +96,75 @@ impl Drop for TcpStream<'_> {
 }
 
 impl<'s> TcpStream<'s> {
-    pub(crate) fn new(
+    pub(crate) async fn connect(
         token: TcpToken<'s>,
+        host: &str,
+        port: u16,
         drop_channel: &'s DropChannel,
         commands: CommandRunner<'s>,
-    ) -> Self {
-        TcpStream {
-            _drop: AsyncDrop::new(drop_channel, DropMessage::Connection(token.ordinal())),
-            token,
-            commands,
-            closed: AtomicBool::new(false),
-            events: PubSubChannel::new(),
+    ) -> Result<TcpStream<'s>, ConnectError> {
+        // create a drop guard here, so that if this function errors,
+        // we make sure to clean up the connection
+        let drop_guard = AsyncDrop::new(drop_channel, DropMessage::Connection(token.ordinal()));
+
+        commands
+            .lock()
+            .await
+            .run(cipstart::Connect {
+                mode: ConnectMode::Tcp,
+                number: token.ordinal(),
+                destination: host.try_into().map_err(|_| Error::BufferOverflow)?,
+                port,
+            })
+            .await?;
+
+        // Wait for a response.
+        // Based on testing, a connection will timeout after ~120 seconds, so we add our own
+        // timeout to this step to prevent us from waiting forever if the modem died.
+        for _ in 0..21 {
+            match with_timeout(Duration::from_secs(6), token.next_message()).await {
+                Err(TimeoutError) => {
+                    // Make sure the modem is still responding to commands.
+                    commands.lock().await.run(at::At).await?;
+                }
+                Ok(Err(Lagged)) => {
+                    log::error!(
+                        "TcpStream lagged while waiting to establish a connection. \
+                         This shouldn't happen. Is the executor extremely overloaded?"
+                    );
+                }
+                Ok(Ok(msg)) => match msg {
+                    ConnectionMessage::Connected => {
+                        return Ok(TcpStream {
+                            _drop: drop_guard,
+                            token,
+                            commands,
+                            closed: AtomicBool::new(false),
+                            events: PubSubChannel::new(),
+                            timeout: Duration::from_secs(120),
+                        });
+                    }
+
+                    ConnectionMessage::ConnectionFailed => return Err(ConnectError::ConnectFailed),
+
+                    // This should never happen, since we guard against connections already being used.
+                    msg => return Err(ConnectError::Unexpected(msg)),
+                },
+            }
         }
+
+        // The modem never got back to us, it probably died.
+        Err(ConnectError::Other(Error::Timeout))
     }
 
+    /// Set the timeout of read and write operations.
+    ///
+    /// Default is 120 seconds.
+    pub fn set_timeout(&mut self, timeout: Duration) {
+        self.timeout = timeout;
+    }
+
+    /// Split the stream into a reader and a writer half.
     pub fn split(&mut self) -> (TcpReader<'_>, TcpWriter<'_>) {
         let reader = TcpReader { stream: self };
         let writer = TcpWriter { stream: self };
@@ -112,13 +178,21 @@ impl<'s> TcpStream<'s> {
         let publisher =
             self.events.publisher().unwrap(/* capacity is 2, only reader and writer use channel */);
         loop {
-            let event = self.token.events().recv().await;
-            publisher.publish(event).await;
+            match self.token.next_message().await {
+                Ok(message) => publisher.publish(message).await,
+                Err(Lagged) => {
+                    log::warn!(
+                        "TcpStream {} missed some connection messages from the modem. \
+                        This shouldn't happen, this connection may behave unpredictably.",
+                        self.token.ordinal()
+                    );
+                }
+            }
         }
     }
 }
 
-impl<'s> Write for TcpStream<'s> {
+impl Write for TcpStream<'_> {
     type WriteFuture<'a> = impl Future<Output = Result<usize, Self::Error>> + 'a
     where
         Self: 'a;
@@ -139,7 +213,7 @@ impl<'s> Write for TcpStream<'s> {
     }
 }
 
-impl<'s> Read for TcpStream<'s> {
+impl Read for TcpStream<'_> {
     type ReadFuture<'a> = impl Future<Output = Result<usize, Self::Error>> + 'a
     where
         Self: 'a;
@@ -152,7 +226,7 @@ impl<'s> Read for TcpStream<'s> {
     }
 }
 
-impl<'s> Write for TcpWriter<'s> {
+impl Write for TcpWriter<'_> {
     type WriteFuture<'a> = impl Future<Output = Result<usize, Self::Error>> + 'a
     where
         Self: 'a;
@@ -191,18 +265,24 @@ impl<'s> Write for TcpWriter<'s> {
 
                 commands.send_bytes(chunk).await;
 
-                loop {
-                    select_biased! {
-                        _ = stream.handle_events().fuse() => unreachable!(),
-                        event = events.next_message_pure().fuse() => match event {
-                            ConnectionMessage::SendFail => return Err(TcpError::SendFail),
-                            ConnectionMessage::SendSuccess => break,
-                            ConnectionMessage::Closed => {
-                                stream.closed.store(true, Ordering::Release);
-                                return Err(TcpError::Closed);
-                            }
-                            _ => {}
+                use ConnectionMessage::*;
+                select_biased! {
+                    _ = stream.handle_events().fuse() => unreachable!(),
+                    event = events.next_message_pure().fuse() => match event {
+                        SendSuccess => {},
+                        SendFail => return Err(TcpError::SendFail),
+                        Closed => {
+                            stream.closed.store(true, Ordering::Release);
+                            return Err(TcpError::Closed);
                         }
+                        Connected | AlreadyConnected | ConnectionFailed => {
+                            log::error!("TcpStream received an unexpected ConnectionMessage: {:?}", event);
+                            stream.closed.store(true, Ordering::Release);
+                            return Err(TcpError::Closed);
+                        }
+                    },
+                    _ = Timer::after(self.stream.timeout).fuse() => {
+                        return Err(TcpError::Timeout);
                     }
                 }
             }
@@ -216,7 +296,7 @@ impl<'s> Write for TcpWriter<'s> {
     }
 }
 
-impl<'s> Read for TcpReader<'s> {
+impl Read for TcpReader<'_> {
     type ReadFuture<'a> = impl Future<Output = Result<usize, Self::Error>> + 'a
     where
         Self: 'a;
@@ -245,9 +325,26 @@ impl<'s> Read for TcpReader<'s> {
                     }
                     event = events.next_message_pure().fuse() => {
                         log::trace!("tcp {} got event {:?}", stream.token.ordinal(), event);
-                        if event == ConnectionMessage::Closed {
-                            stream.closed.store(true, Ordering::Release);
-                            break Ok(0);
+                        use ConnectionMessage::*;
+                        match event {
+                            Closed => {
+                                stream.closed.store(true, Ordering::Release);
+                                break Ok(0);
+                            }
+                            SendSuccess | SendFail => {}
+                            Connected | AlreadyConnected | ConnectionFailed => {
+                                log::error!("TcpStream received an unexpected ConnectionMessage: {:?}", event);
+                                stream.closed.store(true, Ordering::Release);
+                                return Err(TcpError::Closed);
+                            }
+                        }
+                    }
+                    _ = Timer::after(self.stream.timeout).fuse() => {
+                        let commands = self.stream.commands.lock().await;
+
+                        // make sure the modem is still alive
+                        if commands.run(At).await.is_err() {
+                            return Err(TcpError::Timeout);
                         }
                     }
                 };
