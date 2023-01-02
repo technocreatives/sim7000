@@ -4,16 +4,19 @@ use embassy_sync::{
 };
 
 use super::{power::PowerSignal, CommandRunner, RawAtCommand};
-use crate::at_command::{
-    unsolicited::{ConnectionMessage, GnssReport, RegistrationStatus, VoltageWarning},
-    ResponseCode,
-};
-use crate::drop::DropChannel;
 use crate::slot::Slot;
 use crate::tcp::CONNECTION_SLOTS;
+use crate::{
+    at_command::{
+        unsolicited::{ConnectionMessage, GnssReport, RegistrationStatus, VoltageWarning},
+        ResponseCode,
+    },
+    util::RingChannel,
+};
+use crate::{drop::DropChannel, util::Lagged};
 
 pub type TcpRxPipe = Pipe<CriticalSectionRawMutex, 3072>;
-pub type TcpEventChannel = Channel<CriticalSectionRawMutex, ConnectionMessage, 8>;
+pub type TcpEventChannel = RingChannel<CriticalSectionRawMutex, ConnectionMessage, 8>;
 
 pub struct ModemContext {
     pub(crate) power_signal: PowerSignal<12>,
@@ -64,7 +67,7 @@ impl TcpSlot {
     pub const fn new() -> Self {
         TcpSlot {
             rx: Pipe::new(),
-            events: Channel::new(),
+            events: TcpEventChannel::new(),
         }
     }
 }
@@ -100,8 +103,8 @@ impl TcpContext {
 
     pub async fn disconnect_all(&self) {
         for slot in &self.slots {
-            if !slot.is_free() {
-                slot.peek().events.send(ConnectionMessage::Closed).await;
+            if slot.is_claimed() {
+                slot.peek().events.send(ConnectionMessage::Closed);
             }
         }
     }
@@ -110,7 +113,7 @@ impl TcpContext {
 pub struct TcpToken<'c> {
     ordinal: usize,
     rx: &'c TcpRxPipe,
-    events: &'c TcpEventChannel,
+    events: &'c RingChannel<CriticalSectionRawMutex, ConnectionMessage, 8>,
 }
 
 impl<'c> TcpToken<'c> {
@@ -122,7 +125,7 @@ impl<'c> TcpToken<'c> {
         self.rx
     }
 
-    pub fn events(&self) -> &'c TcpEventChannel {
-        self.events
+    pub async fn next_message(&self) -> Result<ConnectionMessage, Lagged> {
+        self.events.recv().await
     }
 }

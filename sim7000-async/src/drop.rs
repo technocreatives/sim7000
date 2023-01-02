@@ -103,6 +103,9 @@ impl DropMessage {
         log::debug!("Cleaning up after {:?}", self);
         match self {
             &DropMessage::Connection(n) => {
+                let tcp_ctx = ctx.tcp.slots[n].peek();
+                tcp_ctx.rx.clear();
+                tcp_ctx.events.clear();
                 ctx.tcp.slots[n].release();
             }
             DropMessage::Gnss => {

@@ -56,7 +56,7 @@ impl<const LISTENERS: usize> PowerSignal<LISTENERS> {
 }
 
 impl PowerSignalBroadcaster<'_> {
-    pub async fn broadcast(&mut self, new_state: PowerState) {
+    pub fn broadcast(&mut self, new_state: PowerState) {
         if self.last != new_state {
             self.last = new_state;
             self.notifyer.publish_immediate(new_state);
