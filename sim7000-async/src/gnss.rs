@@ -1,11 +1,12 @@
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::signal::Signal;
+use embassy_time::{Duration, Timer};
 use futures::{select_biased, FutureExt};
 
 use crate::at_command::unsolicited::{GnssFix, GnssReport};
 use crate::drop::{AsyncDrop, DropChannel, DropMessage};
 use crate::modem::power::PowerSignalListener;
-use crate::PowerState;
+use crate::{log, PowerState};
 
 pub const GNSS_SLOTS: usize = 1;
 
@@ -20,6 +21,9 @@ pub struct Gnss<'c> {
     reports: Option<&'c Signal<CriticalSectionRawMutex, GnssReport>>,
     power_signal: PowerSignalListener<'c>,
     _drop: AsyncDrop<'c>,
+
+    /// The timeout value for waiting for a report.
+    timeout: Duration,
 }
 
 impl<'c> Gnss<'c> {
@@ -27,11 +31,13 @@ impl<'c> Gnss<'c> {
         reports: &'c Signal<CriticalSectionRawMutex, GnssReport>,
         power_signal: PowerSignalListener<'c>,
         drop_channel: &'c DropChannel,
+        timeout: Duration,
     ) -> Self {
         Gnss {
             reports: Some(reports),
             power_signal,
             _drop: AsyncDrop::new(drop_channel, DropMessage::Gnss),
+            timeout,
         }
     }
 
@@ -41,6 +47,11 @@ impl<'c> Gnss<'c> {
         select_biased! {
             report = reports.wait().fuse() => Ok(report),
             _ = self.power_signal.wait_for(PowerState::Off).fuse() => {
+                self.reports = None;
+                Err(Closed)
+            }
+            _ = Timer::after(self.timeout).fuse() => {
+                log::warn!("Gnss timed out");
                 self.reports = None;
                 Err(Closed)
             }
