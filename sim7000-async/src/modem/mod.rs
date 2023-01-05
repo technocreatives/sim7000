@@ -278,6 +278,7 @@ impl<'c, P: ModemPower> Modem<'c, P> {
             reports,
             self.context.power_signal.subscribe(),
             &self.context.drop_channel,
+            Duration::from_secs(20),
         )))
     }
 
