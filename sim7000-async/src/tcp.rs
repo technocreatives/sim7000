@@ -1,8 +1,5 @@
 use cipstart::ConnectMode;
-use core::{
-    future::Future,
-    sync::atomic::{AtomicBool, Ordering},
-};
+use core::sync::atomic::{AtomicBool, Ordering};
 use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, pubsub::PubSubChannel};
 use embassy_time::{with_timeout, Duration, TimeoutError, Timer};
 use embedded_io::{
@@ -193,162 +190,122 @@ impl<'s> TcpStream<'s> {
 }
 
 impl Write for TcpStream<'_> {
-    type WriteFuture<'a> = impl Future<Output = Result<usize, Self::Error>> + 'a
-    where
-        Self: 'a;
-
-    type FlushFuture<'a> = impl Future<Output = Result<(), Self::Error>> + 'a
-    where
-        Self: 'a;
-
-    fn write<'a>(&'a mut self, buf: &'a [u8]) -> Self::WriteFuture<'a> {
-        async {
-            let (_, mut writer) = self.split();
-            writer.write(buf).await
-        }
-    }
-
-    fn flush(&mut self) -> Self::FlushFuture<'_> {
-        async { Ok(()) }
+    async fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Error> {
+        let (_, mut writer) = self.split();
+        writer.write(buf).await
     }
 }
 
 impl Read for TcpStream<'_> {
-    type ReadFuture<'a> = impl Future<Output = Result<usize, Self::Error>> + 'a
-    where
-        Self: 'a;
-
-    fn read<'a>(&'a mut self, buf: &'a mut [u8]) -> Self::ReadFuture<'a> {
-        async {
-            let (mut reader, _) = self.split();
-            reader.read(buf).await
-        }
+    async fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error> {
+        let (mut reader, _) = self.split();
+        reader.read(buf).await
     }
 }
 
 impl Write for TcpWriter<'_> {
-    type WriteFuture<'a> = impl Future<Output = Result<usize, Self::Error>> + 'a
-    where
-        Self: 'a;
+    async fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Error> {
+        let stream = self.stream;
+        let mut events = stream
+            .events
+            .subscriber()
+            .expect("claim tcp stream event subscriber");
 
-    type FlushFuture<'a> = impl Future<Output = Result<(), Self::Error>> + 'a
-    where
-        Self: 'a;
+        /// The maximum number of bytes the modem can handle in a single CIPSEND command
+        // TODO: I *think* this is configurable in the modem, if so, we should check what this
+        // value actually is.
+        const MODEM_WRITE_BUF: usize = 1024;
 
-    fn write<'a>(&'a mut self, buf: &'a [u8]) -> Self::WriteFuture<'a> {
-        async {
-            let stream = self.stream;
-            let mut events = stream
-                .events
-                .subscriber()
-                .expect("claim tcp stream event subscriber");
+        for chunk in buf.chunks(MODEM_WRITE_BUF) {
+            if stream.closed.load(Ordering::Acquire) {
+                return Err(TcpError::Closed);
+            }
 
-            /// The maximum number of bytes the modem can handle in a single CIPSEND command
-            // TODO: I *think* this is configurable in the modem, if so, we should check what this
-            // value actually is.
-            const MODEM_WRITE_BUF: usize = 1024;
+            let commands = stream.commands.lock().await;
 
-            for chunk in buf.chunks(MODEM_WRITE_BUF) {
-                if stream.closed.load(Ordering::Acquire) {
-                    return Err(TcpError::Closed);
+            commands
+                .run(cipsend::IpSend {
+                    connection: stream.token.ordinal(),
+                    data_length: chunk.len(),
+                })
+                .await
+                .map_err(|_| TcpError::SendFail)?;
+
+            commands.send_bytes(chunk).await;
+
+            use ConnectionMessage::*;
+            select_biased! {
+                _ = stream.handle_events().fuse() => unreachable!(),
+                event = events.next_message_pure().fuse() => match event {
+                    SendSuccess => {},
+                    SendFail => return Err(TcpError::SendFail),
+                    Closed => {
+                        stream.closed.store(true, Ordering::Release);
+                        return Err(TcpError::Closed);
+                    }
+                    Connected | AlreadyConnected | ConnectionFailed => {
+                        log::error!("TcpStream received an unexpected ConnectionMessage: {:?}", event);
+                        stream.closed.store(true, Ordering::Release);
+                        return Err(TcpError::Closed);
+                    }
+                },
+                _ = Timer::after(self.stream.timeout).fuse() => {
+                    return Err(TcpError::Timeout);
                 }
+            }
+        }
 
-                let commands = stream.commands.lock().await;
+        Ok(buf.len())
+    }
+}
 
-                commands
-                    .run(cipsend::IpSend {
-                        connection: stream.token.ordinal(),
-                        data_length: chunk.len(),
-                    })
-                    .await
-                    .map_err(|_| TcpError::SendFail)?;
+impl Read for TcpReader<'_> {
+    async fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error> {
+        let stream = self.stream;
 
-                commands.send_bytes(chunk).await;
+        let mut events = stream
+            .events
+            .subscriber()
+            .expect("claim tcp stream event subscriber");
 
-                use ConnectionMessage::*;
-                select_biased! {
-                    _ = stream.handle_events().fuse() => unreachable!(),
-                    event = events.next_message_pure().fuse() => match event {
-                        SendSuccess => {},
-                        SendFail => return Err(TcpError::SendFail),
+        if stream.closed.load(Ordering::Acquire) {
+            return Ok(0);
+        }
+
+        loop {
+            log::trace!("tcp {} awaiting rx/event", stream.token.ordinal());
+
+            select_biased! {
+                _ = stream.handle_events().fuse() => unreachable!(),
+                n = stream.token.rx().read(buf).fuse() => {
+                    log::trace!("tcp {} rx got {} bytes", stream.token.ordinal(), n);
+                    break Ok(n);
+                }
+                event = events.next_message_pure().fuse() => {
+                    log::trace!("tcp {} got event {:?}", stream.token.ordinal(), event);
+                    use ConnectionMessage::*;
+                    match event {
                         Closed => {
                             stream.closed.store(true, Ordering::Release);
-                            return Err(TcpError::Closed);
+                            break Ok(0);
                         }
+                        SendSuccess | SendFail => {}
                         Connected | AlreadyConnected | ConnectionFailed => {
                             log::error!("TcpStream received an unexpected ConnectionMessage: {:?}", event);
                             stream.closed.store(true, Ordering::Release);
                             return Err(TcpError::Closed);
                         }
-                    },
-                    _ = Timer::after(self.stream.timeout).fuse() => {
+                    }
+                }
+                _ = Timer::after(self.stream.timeout).fuse() => {
+                    let commands = self.stream.commands.lock().await;
+
+                    // make sure the modem is still alive
+                    if commands.run(At).await.is_err() {
                         return Err(TcpError::Timeout);
                     }
                 }
-            }
-
-            Ok(buf.len())
-        }
-    }
-
-    fn flush(&mut self) -> Self::FlushFuture<'_> {
-        async { Ok(()) }
-    }
-}
-
-impl Read for TcpReader<'_> {
-    type ReadFuture<'a> = impl Future<Output = Result<usize, Self::Error>> + 'a
-    where
-        Self: 'a;
-
-    fn read<'a>(&'a mut self, buf: &'a mut [u8]) -> Self::ReadFuture<'a> {
-        async {
-            let stream = self.stream;
-
-            let mut events = stream
-                .events
-                .subscriber()
-                .expect("claim tcp stream event subscriber");
-
-            if stream.closed.load(Ordering::Acquire) {
-                return Ok(0);
-            }
-
-            loop {
-                log::trace!("tcp {} awaiting rx/event", stream.token.ordinal());
-
-                select_biased! {
-                    _ = stream.handle_events().fuse() => unreachable!(),
-                    n = stream.token.rx().read(buf).fuse() => {
-                        log::trace!("tcp {} rx got {} bytes", stream.token.ordinal(), n);
-                        break Ok(n);
-                    }
-                    event = events.next_message_pure().fuse() => {
-                        log::trace!("tcp {} got event {:?}", stream.token.ordinal(), event);
-                        use ConnectionMessage::*;
-                        match event {
-                            Closed => {
-                                stream.closed.store(true, Ordering::Release);
-                                break Ok(0);
-                            }
-                            SendSuccess | SendFail => {}
-                            Connected | AlreadyConnected | ConnectionFailed => {
-                                log::error!("TcpStream received an unexpected ConnectionMessage: {:?}", event);
-                                stream.closed.store(true, Ordering::Release);
-                                return Err(TcpError::Closed);
-                            }
-                        }
-                    }
-                    _ = Timer::after(self.stream.timeout).fuse() => {
-                        let commands = self.stream.commands.lock().await;
-
-                        // make sure the modem is still alive
-                        if commands.run(At).await.is_err() {
-                            return Err(TcpError::Timeout);
-                        }
-                    }
-                };
-            }
+            };
         }
     }
 }
