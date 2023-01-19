@@ -8,7 +8,7 @@ repository = "https://github.com/technocreatives/sim7000"
 edition = "2021"
 
 [dependencies]
-embedded-hal-async = { version = "0.1.0-alpha.0"}
+embedded-hal-async = { version = "0.2.0-alpha.0"}
 embedded-hal = { version = "1.0.0-alpha.8" }
 embassy-sync = { git = "https://github.com/embassy-rs/embassy", rev = "aea5a0fd96c1901403e62bac5c1890debd41d22e", features = [ "nightly"]}
 embassy-executor = { git = "https://github.com/embassy-rs/embassy", rev = "aea5a0fd96c1901403e62bac5c1890debd41d22e", features = ["nightly"] }
