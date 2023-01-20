@@ -6,8 +6,7 @@ use embedded_io::{
     asynch::{Read, Write},
     Io,
 };
-use futures::select_biased;
-use futures_util::FutureExt;
+use futures::{select_biased, FutureExt};
 
 use crate::{
     at_command::{at, cipsend, cipstart, unsolicited::ConnectionMessage, At},
