@@ -90,13 +90,13 @@ pub trait ModemPower {
 #[macro_export]
 macro_rules! spawn_modem {
     // TODO: the "as" keyword hack is a bit weird.
-    ($spawner:expr, $io_ty:ty as $io:expr, $power_pins:expr) => {{
+    ($spawner:expr, $io_ty:ty as $io:expr, $power_pins:expr, $apn:expr $(,)?) => {{
         static CONTEXT: ::sim7000_async::modem::ModemContext =
             ::sim7000_async::modem::ModemContext::new();
 
         let spawner: &Spawner = $spawner;
         let (modem, io_pump, tx_pump, rx_pump, drop_pump) =
-            ::sim7000_async::modem::Modem::new($io, $power_pins, &CONTEXT)
+            ::sim7000_async::modem::Modem::new($io, $power_pins, &CONTEXT, $apn)
                 .await
                 .expect("Failed to create Modem");
 

@@ -129,8 +129,11 @@ impl<'a> CommandRunnerGuard<'a> {
         Request: AtRequest<Response = Response>,
         Response: ExpectResponse,
     {
+        log::trace!("Running AT command: {:?}", command);
         self.send_request(&command).await?;
+        log::trace!("Waiting for response for AT command: {:?}", command);
         let result = Response::expect(self).await;
+        log::trace!("Completed AT command: {:?}", command);
 
         if let Err(e) = &result {
             log::error!("AT command {:?} error: {:?}", command, e);
