@@ -3,6 +3,7 @@ mod context;
 pub mod power;
 
 use embassy_time::{with_timeout, Duration, Timer};
+use futures::{select_biased, FutureExt};
 
 use crate::{
     at_command::{
@@ -41,6 +42,9 @@ pub struct Modem<'c, P> {
     power_signal: PowerSignalBroadcaster<'c>,
     commands: CommandRunner<'c>,
     power: P,
+    apn: &'static str,
+    ap_username: &'static str,
+    ap_password: &'static str,
 }
 
 const MODEM_POWER_TIMEOUT: Duration = Duration::from_secs(30);
@@ -50,6 +54,7 @@ impl<'c, P: ModemPower> Modem<'c, P> {
         io: I,
         power: P,
         context: &'c ModemContext,
+        apn: &'static str,
     ) -> Result<
         (
             Modem<'c, P>,
@@ -65,6 +70,9 @@ impl<'c, P: ModemPower> Modem<'c, P> {
             power_signal: context.power_signal.publisher(),
             context,
             power,
+            apn,
+            ap_username: "",
+            ap_password: "",
         };
 
         let io_pump = RawIoPump {
@@ -99,6 +107,7 @@ impl<'c, P: ModemPower> Modem<'c, P> {
     }
 
     pub async fn init(&mut self) -> Result<(), Error> {
+        log::info!("initializing modem");
         self.deactivate().await;
         with_timeout(MODEM_POWER_TIMEOUT, self.power.enable()).await?;
         self.power_signal.broadcast(PowerState::On);
@@ -162,11 +171,23 @@ impl<'c, P: ModemPower> Modem<'c, P> {
         commands.run(configure_edrx).await?;
 
         drop(commands);
+
+        log::info!("modem successfully initialized, turning it back off...");
         self.deactivate().await;
+
         Ok(())
     }
 
+    pub async fn set_ap_username(&mut self, ap_username: &'static str) {
+        self.ap_username = ap_username;
+    }
+
+    pub async fn set_ap_password(&mut self, ap_password: &'static str) {
+        self.ap_password = ap_password;
+    }
+
     pub async fn activate(&mut self) -> Result<(), Error> {
+        log::info!("activating modem");
         self.power_signal.broadcast(PowerState::On);
         with_timeout(MODEM_POWER_TIMEOUT, self.power.enable()).await?;
         let set_flow_control = ifc::SetFlowControl {
@@ -196,6 +217,8 @@ impl<'c, P: ModemPower> Modem<'c, P> {
         commands.run(cipshut::ShutConnections).await?;
 
         self.authenticate(&commands).await?;
+
+        log::info!("modem successfully activated");
         Ok(())
     }
 
@@ -212,23 +235,41 @@ impl<'c, P: ModemPower> Modem<'c, P> {
     }
 
     async fn wait_for_registration(&self, commands: &CommandRunnerGuard<'_>) -> Result<(), Error> {
-        loop {
-            commands.run(cgreg::GetRegistrationStatus).await?;
-            match self.context.registration_events.wait().await {
-                RegistrationStatus::RegisteredHome | RegistrationStatus::RegisteredRoaming => break,
-                _ => Timer::after(Duration::from_millis(200)).await,
+        let wait_for_registration = async move {
+            loop {
+                commands.run(cgreg::GetRegistrationStatus).await?;
+                match self.context.registration_events.wait().await {
+                    RegistrationStatus::RegisteredHome | RegistrationStatus::RegisteredRoaming => {
+                        break
+                    }
+                    _ => Timer::after(Duration::from_millis(200)).await,
+                }
             }
-        }
+            Ok(())
+        };
 
-        Ok(())
+        let warn_on_long_wait = async {
+            for i in 1.. {
+                Timer::after(Duration::from_secs(20)).await;
+                log::warn!(
+                    "modem registration seems to be taking a long time ({}s)...",
+                    i * 20
+                );
+            }
+        };
+
+        select_biased! {
+            r = wait_for_registration.fuse() => r,
+            _ = warn_on_long_wait.fuse() => unreachable!(),
+        }
     }
 
     async fn authenticate(&self, commands: &CommandRunnerGuard<'_>) -> Result<(), Error> {
         commands
             .run(cstt::StartTask {
-                apn: "iot.1nce.net".into(),
-                username: "".into(),
-                password: "".into(),
+                apn: self.apn.into(),
+                username: self.ap_username.into(),
+                password: self.ap_password.into(),
             })
             .await?;
 
