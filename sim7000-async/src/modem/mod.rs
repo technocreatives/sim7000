@@ -10,7 +10,7 @@ use crate::{
         ate, cbatchk, ccid,
         cedrxs::{self, AcTType, EDRXSetting},
         cfgri::{self, RiPinMode},
-        cgmr, cgnspwr, cgnsurc, cgreg, cifsrex, ciicr, cipmux, cipshut,
+        cgmr, cgnapn, cgnspwr, cgnsurc, cgreg, cifsrex, ciicr, cipmux, cipshut,
         cmee::{self, CMEErrorMode},
         cmnb::{self, NbMode},
         cnmp, cops, cpsi, csclk, csq, cstt,
@@ -42,7 +42,7 @@ pub struct Modem<'c, P> {
     power_signal: PowerSignalBroadcaster<'c>,
     commands: CommandRunner<'c>,
     power: P,
-    apn: &'static str,
+    apn: Option<&'static str>,
     ap_username: &'static str,
     ap_password: &'static str,
 }
@@ -54,7 +54,6 @@ impl<'c, P: ModemPower> Modem<'c, P> {
         io: I,
         power: P,
         context: &'c ModemContext,
-        apn: &'static str,
     ) -> Result<
         (
             Modem<'c, P>,
@@ -70,7 +69,7 @@ impl<'c, P: ModemPower> Modem<'c, P> {
             power_signal: context.power_signal.publisher(),
             context,
             power,
-            apn,
+            apn: None,
             ap_username: "",
             ap_password: "",
         };
@@ -178,11 +177,15 @@ impl<'c, P: ModemPower> Modem<'c, P> {
         Ok(())
     }
 
-    pub async fn set_ap_username(&mut self, ap_username: &'static str) {
+    pub fn set_apn(&mut self, apn: &'static str) {
+        self.apn = Some(apn);
+    }
+
+    pub fn set_ap_username(&mut self, ap_username: &'static str) {
         self.ap_username = ap_username;
     }
 
-    pub async fn set_ap_password(&mut self, ap_password: &'static str) {
+    pub fn set_ap_password(&mut self, ap_password: &'static str) {
         self.ap_password = ap_password;
     }
 
@@ -265,9 +268,24 @@ impl<'c, P: ModemPower> Modem<'c, P> {
     }
 
     async fn authenticate(&self, commands: &CommandRunnerGuard<'_>) -> Result<(), Error> {
+        let apn = match self.apn {
+            Some(apn) => apn.into(),
+            None => {
+                log::debug!("no default APN set, checking network for suggested APN.");
+                let (network_apn, _) = commands.run(cgnapn::GetNetworkApn).await?;
+                let Some(apn) = network_apn.apn else {
+                    log::error!("no APN set");
+                    return Err(Error::NoApn);
+                };
+                apn
+            }
+        };
+
+        log::info!("authenticating with apn {:?}", apn);
+
         commands
             .run(cstt::StartTask {
-                apn: self.apn.into(),
+                apn,
                 username: self.ap_username.into(),
                 password: self.ap_password.into(),
             })
