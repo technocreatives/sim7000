@@ -7,7 +7,8 @@ use super::{AtRequest, GenericOk};
 #[derive(Debug)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct StartTask {
-    pub apn: String<50>,
+    // The maximum length of an APN is 63 octets (bytes)
+    pub apn: String<63>,
     pub username: String<50>,
     pub password: String<50>,
 }

@@ -10,6 +10,9 @@ pub enum Error {
     Sim(SimError),
     Timeout,
     Serial,
+
+    /// No default APN was set, and the network did not provide one.
+    NoApn,
 }
 
 impl embedded_io::Error for Error {
