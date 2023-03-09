@@ -42,7 +42,7 @@ pub struct Modem<'c, P> {
     power_signal: PowerSignalBroadcaster<'c>,
     commands: CommandRunner<'c>,
     power: P,
-    apn: Option<&'static str>,
+    apn: Option<heapless::String<63>>,
     ap_username: &'static str,
     ap_password: &'static str,
 }
@@ -177,7 +177,7 @@ impl<'c, P: ModemPower> Modem<'c, P> {
         Ok(())
     }
 
-    pub fn set_apn(&mut self, apn: &'static str) {
+    pub fn set_apn(&mut self, apn: heapless::String<63>) {
         self.apn = Some(apn);
     }
 
@@ -198,28 +198,31 @@ impl<'c, P: ModemPower> Modem<'c, P> {
             dte_by_dce: FlowControl::Hardware,
         };
 
-        let commands = self.commands.lock().await;
+        // block for commands to avoid mutability problems
+        {
+            let commands = self.commands.lock().await;
 
-        for _ in 0..5 {
-            if let Ok(Ok(_)) = with_timeout(Duration::from_millis(2000), async {
-                commands.run(set_flow_control).await
-            })
-            .await
-            {
-                break;
+            for _ in 0..5 {
+                if let Ok(Ok(_)) = with_timeout(Duration::from_millis(2000), async {
+                    commands.run(set_flow_control).await
+                })
+                .await
+                {
+                    break;
+                }
             }
-        }
-        commands.run(ate::SetEcho(false)).await?;
-        commands
-            .run(cgreg::ConfigureRegistrationUrc::EnableRegLocation)
-            .await?;
+            commands.run(ate::SetEcho(false)).await?;
+            commands
+                .run(cgreg::ConfigureRegistrationUrc::EnableRegLocation)
+                .await?;
 
-        self.wait_for_registration(&commands).await?;
+            self.wait_for_registration(&commands).await?;
 
-        commands.run(cipmux::EnableMultiIpConnection(true)).await?;
-        commands.run(cipshut::ShutConnections).await?;
+            commands.run(cipmux::EnableMultiIpConnection(true)).await?;
+            commands.run(cipshut::ShutConnections).await?;
+        };
 
-        self.authenticate(&commands).await?;
+        self.authenticate().await?;
 
         log::info!("modem successfully activated");
         Ok(())
@@ -267,9 +270,10 @@ impl<'c, P: ModemPower> Modem<'c, P> {
         }
     }
 
-    async fn authenticate(&self, commands: &CommandRunnerGuard<'_>) -> Result<(), Error> {
-        let apn = match self.apn {
-            Some(apn) => apn.into(),
+    async fn authenticate(&mut self) -> Result<(), Error> {
+        let commands = self.commands.lock().await;
+        match &self.apn {
+            Some(_) => {}
             None => {
                 log::debug!("no default APN set, checking network for suggested APN.");
                 let (network_apn, _) = commands.run(cgnapn::GetNetworkApn).await?;
@@ -277,15 +281,15 @@ impl<'c, P: ModemPower> Modem<'c, P> {
                     log::error!("no APN set");
                     return Err(Error::NoApn);
                 };
-                apn
+                self.apn = Some(apn.into());
             }
         };
 
-        log::info!("authenticating with apn {:?}", apn);
+        log::info!("authenticating with apn {:?}", self.apn);
 
         commands
             .run(cstt::StartTask {
-                apn,
+                apn: self.apn.clone().unwrap(),
                 username: self.ap_username.into(),
                 password: self.ap_password.into(),
             })
