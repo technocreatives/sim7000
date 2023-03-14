@@ -198,31 +198,53 @@ impl<'c, P: ModemPower> Modem<'c, P> {
             dte_by_dce: FlowControl::Hardware,
         };
 
-        // block for commands to avoid mutability problems
-        {
-            let commands = self.commands.lock().await;
+        let commands = self.commands.lock().await;
 
-            for _ in 0..5 {
-                if let Ok(Ok(_)) = with_timeout(Duration::from_millis(2000), async {
-                    commands.run(set_flow_control).await
-                })
-                .await
-                {
-                    break;
-                }
+        for _ in 0..5 {
+            if let Ok(Ok(_)) = with_timeout(Duration::from_millis(2000), async {
+                commands.run(set_flow_control).await
+            })
+            .await
+            {
+                break;
             }
-            commands.run(ate::SetEcho(false)).await?;
-            commands
-                .run(cgreg::ConfigureRegistrationUrc::EnableRegLocation)
-                .await?;
+        }
+        commands.run(ate::SetEcho(false)).await?;
+        commands
+            .run(cgreg::ConfigureRegistrationUrc::EnableRegLocation)
+            .await?;
 
-            self.wait_for_registration(&commands).await?;
+        self.wait_for_registration(&commands).await?;
 
-            commands.run(cipmux::EnableMultiIpConnection(true)).await?;
-            commands.run(cipshut::ShutConnections).await?;
+        commands.run(cipmux::EnableMultiIpConnection(true)).await?;
+        commands.run(cipshut::ShutConnections).await?;
+
+        let apn = match &self.apn {
+            Some(apn) => self.apn.insert(apn.clone()),
+            None => {
+                log::debug!("no default APN set, checking network for suggested APN.");
+                let (network_apn, _) = commands.run(cgnapn::GetNetworkApn).await?;
+                let Some(apn) = network_apn.apn else {
+                    log::error!("no APN set");
+                    return Err(Error::NoApn);
+                };
+                self.apn.insert(apn)
+            }
         };
 
-        self.authenticate().await?;
+        //log::info!("authenticating with apn {:?}", self.apn);
+
+        commands
+            .run(cstt::StartTask {
+                apn: apn.clone(),
+                username: self.ap_username.into(),
+                password: self.ap_password.into(),
+            })
+            .await?;
+
+        commands.run(ciicr::StartGprs).await?;
+
+        let (_ip, _) = commands.run(cifsrex::GetLocalIpExt).await?;
 
         log::info!("modem successfully activated");
         Ok(())
@@ -268,38 +290,6 @@ impl<'c, P: ModemPower> Modem<'c, P> {
             r = wait_for_registration.fuse() => r,
             _ = warn_on_long_wait.fuse() => unreachable!(),
         }
-    }
-
-    async fn authenticate(&mut self) -> Result<(), Error> {
-        let commands = self.commands.lock().await;
-        match &self.apn {
-            Some(_) => {}
-            None => {
-                log::debug!("no default APN set, checking network for suggested APN.");
-                let (network_apn, _) = commands.run(cgnapn::GetNetworkApn).await?;
-                let Some(apn) = network_apn.apn else {
-                    log::error!("no APN set");
-                    return Err(Error::NoApn);
-                };
-                self.apn = Some(apn.into());
-            }
-        };
-
-        log::info!("authenticating with apn {:?}", self.apn);
-
-        commands
-            .run(cstt::StartTask {
-                apn: self.apn.clone().unwrap(),
-                username: self.ap_username.into(),
-                password: self.ap_password.into(),
-            })
-            .await?;
-
-        commands.run(ciicr::StartGprs).await?;
-
-        let (_ip, _) = commands.run(cifsrex::GetLocalIpExt).await?;
-
-        Ok(())
     }
 
     pub async fn connect_tcp(
