@@ -232,7 +232,7 @@ impl<'c, P: ModemPower> Modem<'c, P> {
             }
         };
 
-        //log::info!("authenticating with apn {:?}", self.apn);
+        log::info!("authenticating with apn {:?}", apn);
 
         commands
             .run(cstt::StartTask {
