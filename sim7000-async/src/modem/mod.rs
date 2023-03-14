@@ -220,7 +220,7 @@ impl<'c, P: ModemPower> Modem<'c, P> {
         commands.run(cipshut::ShutConnections).await?;
 
         let apn = match &self.apn {
-            Some(apn) => self.apn.insert(apn.clone()),
+            Some(apn) => apn,
             None => {
                 log::debug!("no default APN set, checking network for suggested APN.");
                 let (network_apn, _) = commands.run(cgnapn::GetNetworkApn).await?;
