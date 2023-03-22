@@ -211,6 +211,9 @@ impl<'c, P: ModemPower> Modem<'c, P> {
         }
         commands.run(ate::SetEcho(false)).await?;
         commands
+            .run(cmee::ConfigureCMEErrors(CMEErrorMode::Numeric))
+            .await?;
+        commands
             .run(cgreg::ConfigureRegistrationUrc::EnableRegLocation)
             .await?;
 
