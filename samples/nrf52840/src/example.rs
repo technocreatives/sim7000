@@ -37,7 +37,7 @@ pub async fn voltage_warn(warner: VoltageWarner<'static>) {
 }
 
 #[embassy_executor::task]
-pub async fn gnss(gnss: Gnss<'static>) {
+pub async fn gnss(mut gnss: Gnss<'static>) {
     loop {
         let report = gnss.get_report().await;
         defmt::info!("GNSS report: {:?}", report);
