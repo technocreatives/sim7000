@@ -9,10 +9,10 @@ edition = "2021"
 
 [dependencies]
 embedded-hal-async = { version = "0.2.0-alpha.0"}
-embassy-sync = { git = "https://github.com/embassy-rs/embassy", rev = "aea5a0fd96c1901403e62bac5c1890debd41d22e", features = [ "nightly"]}
-embassy-executor = { git = "https://github.com/embassy-rs/embassy", rev = "aea5a0fd96c1901403e62bac5c1890debd41d22e", features = ["nightly"] }
-embassy-time = { git = "https://github.com/embassy-rs/embassy", rev = "aea5a0fd96c1901403e62bac5c1890debd41d22e", features = ["nightly"] }
-embassy-futures = { git = "https://github.com/embassy-rs/embassy", rev = "aea5a0fd96c1901403e62bac5c1890debd41d22e" }
+embassy-sync = { git = "https://github.com/embassy-rs/embassy", rev = "425a35bf8a6a84afbe0b555301106a155d43e2e7", features = [ "nightly"]}
+embassy-executor = { git = "https://github.com/embassy-rs/embassy", rev = "425a35bf8a6a84afbe0b555301106a155d43e2e7", features = ["nightly"] }
+embassy-time = { git = "https://github.com/embassy-rs/embassy", rev = "425a35bf8a6a84afbe0b555301106a155d43e2e7", features = ["nightly"] }
+embassy-futures = { git = "https://github.com/embassy-rs/embassy", rev = "425a35bf8a6a84afbe0b555301106a155d43e2e7" }
 embedded-io = { version = "0.4.0", features = ["async"] }
 heapless = "0.7"
 futures = { version = "0.3", default-features = false, features = ["async-await"] }
