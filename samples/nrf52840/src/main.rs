@@ -7,10 +7,10 @@ mod example;
 use core::future::Future;
 use embassy_executor::Spawner;
 use embassy_nrf::{
-    buffered_uarte::{BufferedUarte, BufferedUarteRx, BufferedUarteTx, State},
+    bind_interrupts,
+    buffered_uarte::{self, BufferedUarte, BufferedUarteRx, BufferedUarteTx},
     gpio::{AnyPin, Input, Level, Output, OutputDrive, Pin, Pull},
-    interrupt::{self, UARTE0_UART0},
-    peripherals::{PPI_CH1, PPI_CH2, TIMER0, UARTE0},
+    peripherals::{PPI_CH1, PPI_CH2, PPI_GROUP0, TIMER0, UARTE0},
     uarte,
 };
 use embassy_time::{Duration, Timer};
@@ -22,6 +22,10 @@ use defmt_rtt as _; // linker shenanigans
 extern crate panic_rtt_target;
 
 type Modem = sim7000_async::modem::Modem<'static, ModemPowerPins>;
+
+bind_interrupts!(struct Irqs {
+    UARTE0_UART0 => buffered_uarte::InterruptHandler<UARTE0>;
+});
 
 #[embassy_executor::main]
 async fn main(spawner: Spawner) {
@@ -35,7 +39,6 @@ async fn main(spawner: Spawner) {
 
     defmt::info!("Started");
 
-    let irq = interrupt::take!(UARTE0_UART0);
     let mut config = uarte::Config::default();
     config.parity = uarte::Parity::EXCLUDED;
     config.baudrate = uarte::Baudrate::BAUD115200;
@@ -55,13 +58,12 @@ async fn main(spawner: Spawner) {
             timer: p.TIMER0,
             ppi_ch1: p.PPI_CH1,
             ppi_ch2: p.PPI_CH2,
-            irq,
+            ppi_gr: p.PPI_GROUP0,
             rxd: p.P0_20.degrade(),
             txd: p.P0_24.degrade(),
             rts: p.P0_11.degrade(),
             cts: p.P0_08.degrade(),
             config,
-            state: State::new(),
             tx_buffer: [0; 64],
             rx_buffer: [0; 64],
         },
@@ -141,13 +143,12 @@ struct UarteComponents {
     pub timer: TIMER0,
     pub ppi_ch1: PPI_CH1,
     pub ppi_ch2: PPI_CH2,
-    pub irq: UARTE0_UART0,
+    pub ppi_gr: PPI_GROUP0,
     pub rxd: AnyPin,
     pub txd: AnyPin,
     pub rts: AnyPin,
     pub cts: AnyPin,
     pub config: uarte::Config,
-    pub state: State<'static, UARTE0, TIMER0>,
     pub tx_buffer: [u8; 64],
     pub rx_buffer: [u8; 64],
 }
@@ -158,19 +159,13 @@ impl BuildIo for UarteComponents {
     Self: 'd;
 
     fn build<'d>(&'d mut self) -> Self::IO<'d> {
-        let state = unsafe {
-            core::mem::transmute::<
-                &'d mut State<'static, UARTE0, TIMER0>,
-                &'d mut State<'d, UARTE0, TIMER0>,
-            >(&mut self.state)
-        };
-        AppUarte(BufferedUarte::new(
-            state,
+        AppUarte(BufferedUarte::new_with_rtscts(
             &mut self.uarte,
             &mut self.timer,
             &mut self.ppi_ch1,
             &mut self.ppi_ch2,
-            &mut self.irq,
+            &mut self.ppi_gr,
+            Irqs,
             &mut self.rxd,
             &mut self.txd,
             &mut self.cts,
