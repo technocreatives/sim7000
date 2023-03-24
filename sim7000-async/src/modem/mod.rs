@@ -3,7 +3,7 @@ mod context;
 pub mod power;
 
 use embassy_time::{with_timeout, Duration, Timer};
-use futures::{select_biased, FutureExt};
+use futures::{future::ok, select_biased, FutureExt};
 
 use crate::{
     at_command::{
@@ -173,6 +173,49 @@ impl<'c, P: ModemPower> Modem<'c, P> {
 
         log::info!("modem successfully initialized, turning it back off...");
         self.deactivate().await;
+
+        Ok(())
+    }
+
+    pub async fn test_response(&mut self) -> Result<(), Error> {
+        with_timeout(MODEM_POWER_TIMEOUT, self.power.enable()).await?;
+        self.power_signal.broadcast(PowerState::On);
+
+        let commands = self.commands.lock().await;
+
+        let set_flow_control = ifc::SetFlowControl {
+            dce_by_dte: FlowControl::Hardware,
+            dte_by_dce: FlowControl::Hardware,
+        };
+
+        // Turn on hardware flow control, the modem does not save this state on reboot.
+        // We need to set it as fast as possible to avoid dropping bytes.
+        for _ in 0..5 {
+            if let Ok(Ok(_)) = with_timeout(Duration::from_millis(2000), async {
+                commands.run(set_flow_control).await
+            })
+            .await
+            {
+                break;
+            }
+        }
+
+        // Modem has been known to get stuck in an unresponsive state until we jiggle it by
+        // enabling echo. This is fine.
+        for _ in 0..5 {
+            if let Ok(Ok(_)) = with_timeout(
+                Duration::from_millis(1000),
+                commands.run(ate::SetEcho(true)),
+            )
+            .await
+            {
+                break;
+            }
+        }
+
+        commands.run(ipr::SetBaudRate(BaudRate::Hz115200)).await?;
+
+        commands.run(At).await?;
 
         Ok(())
     }
