@@ -105,7 +105,7 @@ impl<'c, P: ModemPower> Modem<'c, P> {
         Ok((modem, io_pump, tx_pump, rx_pump, drop_pump))
     }
 
-    pub async fn init(&mut self) -> Result<(), Error> {
+    pub async fn init(&mut self, cell_config: CellConfig) -> Result<(), Error> {
         log::info!("initializing modem");
         self.deactivate().await;
         with_timeout(MODEM_POWER_TIMEOUT, self.power.enable()).await?;
@@ -143,6 +143,8 @@ impl<'c, P: ModemPower> Modem<'c, P> {
             }
         }
 
+        let cmc = Cmc::from(cell_config);
+
         commands.run(csclk::SetSlowClock(true)).await?;
         commands.run(At).await?;
         commands.run(ipr::SetBaudRate(BaudRate::Hz115200)).await?;
@@ -150,14 +152,14 @@ impl<'c, P: ModemPower> Modem<'c, P> {
         commands
             .run(cmee::ConfigureCMEErrors(CMEErrorMode::Numeric))
             .await?;
-        commands.run(cnmp::SetNetworkMode(NetworkMode::Lte)).await?;
-        commands.run(cmnb::SetNbMode(NbMode::CatM)).await?;
+        commands.run(cnmp::SetNetworkMode(cmc.network_mode)).await?;
+        commands.run(cmnb::SetNbMode(cmc.nb_mode)).await?;
         commands.run(cfgri::ConfigureRiPin(RiPinMode::On)).await?;
         commands.run(cbatchk::EnableVBatCheck(true)).await?;
 
         let configure_edrx = cedrxs::ConfigureEDRX {
             n: EDRXSetting::Enable,
-            act_type: AcTType::CatM,
+            act_type: cmc.act_type,
             requested_edrx_value: 0b0000,
         };
 
@@ -388,5 +390,74 @@ impl<'c, P: ModemPower> Modem<'c, P> {
     pub async fn wake(&mut self) {
         self.power.wake().await;
         self.power_signal.broadcast(PowerState::On);
+    }
+}
+
+/// Cellular mobile communication
+struct Cmc {
+    network_mode: NetworkMode,
+    nb_mode: NbMode,
+    act_type: AcTType,
+}
+
+pub enum CellConfig {
+    LteCatM,
+    LteNbIot,
+    GsmCatM,
+    GsmNbIot,
+    AutoCatM,
+    AutoNbIot,
+}
+
+impl Cmc {
+    /// Network mode: Automatic
+    ///
+    /// Nb mode: CatM
+    ///
+    /// Act type: CatM
+    fn default() -> Cmc {
+        Cmc {
+            network_mode: NetworkMode::Automatic,
+            nb_mode: NbMode::CatM,
+            act_type: AcTType::CatM,
+        }
+    }
+
+    /// Parse Cmc from CellConfig
+    fn from(cell_config: CellConfig) -> Self {
+        let mut cmc: Cmc = Cmc::default();
+
+        match cell_config {
+            CellConfig::LteCatM => {
+                cmc.network_mode = NetworkMode::Lte;
+                cmc.nb_mode = NbMode::CatM;
+                cmc.act_type = AcTType::CatM;
+            }
+            CellConfig::LteNbIot => {
+                cmc.network_mode = NetworkMode::Lte;
+                cmc.nb_mode = NbMode::NbIot;
+                cmc.act_type = AcTType::NbIot;
+            }
+            CellConfig::GsmCatM => {
+                cmc.network_mode = NetworkMode::Gsm;
+                cmc.nb_mode = NbMode::CatM;
+                cmc.act_type = AcTType::CatM;
+            }
+            CellConfig::GsmNbIot => {
+                cmc.network_mode = NetworkMode::Gsm;
+                cmc.nb_mode = NbMode::NbIot;
+                cmc.act_type = AcTType::NbIot;
+            }
+            CellConfig::AutoCatM => {
+                // This is the Cmc::default()
+            }
+            CellConfig::AutoNbIot => {
+                cmc.network_mode = NetworkMode::Automatic;
+                cmc.nb_mode = NbMode::NbIot;
+                cmc.act_type = AcTType::NbIot;
+            }
+        }
+
+        cmc
     }
 }
