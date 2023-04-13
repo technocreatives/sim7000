@@ -51,13 +51,13 @@ mod tests {
         let slot = Slot::new(());
 
         for _ in 0..3 {
-            assert!(slot.is_free());
-            assert!(slot.is_free());
+            assert!(!slot.is_claimed());
+            assert!(!slot.is_claimed());
             assert!(slot.claim().is_some());
-            assert!(!slot.is_free());
-            assert!(!slot.is_free());
+            assert!(slot.is_claimed());
+            assert!(slot.is_claimed());
             assert!(slot.claim().is_none());
-            assert!(!slot.is_free());
+            assert!(slot.is_claimed());
             slot.release();
         }
     }
