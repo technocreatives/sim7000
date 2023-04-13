@@ -80,3 +80,19 @@ impl AtResponse for SystemInfo {
         }
     }
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    #[test]
+    fn parse_cpsi() {
+        let valid_cpsis = [
+            "+CPSI: GSM,Online,240-24,0x28a0,50183,61 EGSM 900,-53,0,58-58",
+            "+CPSI: LTE CAT-M1,Online,240-07,0x2AFE,34564631,149,EUTRAN-BAND20,6400,3,3,-12,-81,-52,10",
+        ];
+
+        for valid in valid_cpsis {
+            assert!(SystemInfo::from_line(valid).is_ok());
+        }
+    }
+}
