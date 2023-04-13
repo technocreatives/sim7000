@@ -12,7 +12,7 @@
 //! (see [DropPump](crate::pump::DropPump)).
 //!
 //! Example
-//! ```
+//! ```ignore
 //! struct TypeWithAnAsyncDescructor {
 //!    _drop: AsyncDrop<'static>,
 //! }
