@@ -105,7 +105,7 @@ impl<'c, P: ModemPower> Modem<'c, P> {
         Ok((modem, io_pump, tx_pump, rx_pump, drop_pump))
     }
 
-    pub async fn init(&mut self, cell_config: CellConfig) -> Result<(), Error> {
+    pub async fn init(&mut self, registration_config: RegistrationConfig) -> Result<(), Error> {
         log::info!("initializing modem");
         self.deactivate().await;
         with_timeout(MODEM_POWER_TIMEOUT, self.power.enable()).await?;
@@ -143,7 +143,7 @@ impl<'c, P: ModemPower> Modem<'c, P> {
             }
         }
 
-        let cmc = Cmc::from(cell_config);
+        let cmc = Cmc::from(registration_config.cell_config);
 
         commands.run(csclk::SetSlowClock(true)).await?;
         commands.run(At).await?;
@@ -158,7 +158,7 @@ impl<'c, P: ModemPower> Modem<'c, P> {
         commands.run(cbatchk::EnableVBatCheck(true)).await?;
 
         let configure_edrx = cedrxs::ConfigureEDRX {
-            n: EDRXSetting::Enable,
+            n: registration_config.edrx_setting,
             act_type: cmc.act_type,
             requested_edrx_value: 0b0000,
         };
@@ -393,6 +393,25 @@ impl<'c, P: ModemPower> Modem<'c, P> {
     }
 }
 
+/// Configure cellular mobile communication and edrx (add more as needed)
+///
+/// Provides a deafault function that configures the modem to:
+/// * Automatically choose between LTE/GSM with CatM
+/// * EDRX enabled
+pub struct RegistrationConfig {
+    pub cell_config: CellConfig,
+    pub edrx_setting: EDRXSetting,
+}
+
+impl RegistrationConfig {
+    pub fn default() -> Self {
+        RegistrationConfig {
+            cell_config: CellConfig::AutoCatM,
+            edrx_setting: EDRXSetting::Enable,
+        }
+    }
+}
+
 /// Cellular mobile communication
 struct Cmc {
     network_mode: NetworkMode,
@@ -410,54 +429,39 @@ pub enum CellConfig {
 }
 
 impl Cmc {
-    /// Network mode: Automatic
-    ///
-    /// Nb mode: CatM
-    ///
-    /// Act type: CatM
-    fn default() -> Cmc {
-        Cmc {
-            network_mode: NetworkMode::Automatic,
-            nb_mode: NbMode::CatM,
-            act_type: AcTType::CatM,
-        }
-    }
-
     /// Parse Cmc from CellConfig
     fn from(cell_config: CellConfig) -> Self {
-        let mut cmc: Cmc = Cmc::default();
-
         match cell_config {
-            CellConfig::LteCatM => {
-                cmc.network_mode = NetworkMode::Lte;
-                cmc.nb_mode = NbMode::CatM;
-                cmc.act_type = AcTType::CatM;
-            }
-            CellConfig::LteNbIot => {
-                cmc.network_mode = NetworkMode::Lte;
-                cmc.nb_mode = NbMode::NbIot;
-                cmc.act_type = AcTType::NbIot;
-            }
-            CellConfig::GsmCatM => {
-                cmc.network_mode = NetworkMode::Gsm;
-                cmc.nb_mode = NbMode::CatM;
-                cmc.act_type = AcTType::CatM;
-            }
-            CellConfig::GsmNbIot => {
-                cmc.network_mode = NetworkMode::Gsm;
-                cmc.nb_mode = NbMode::NbIot;
-                cmc.act_type = AcTType::NbIot;
-            }
-            CellConfig::AutoCatM => {
-                // This is the Cmc::default()
-            }
-            CellConfig::AutoNbIot => {
-                cmc.network_mode = NetworkMode::Automatic;
-                cmc.nb_mode = NbMode::NbIot;
-                cmc.act_type = AcTType::NbIot;
-            }
+            CellConfig::LteCatM => Cmc {
+                network_mode: NetworkMode::Lte,
+                nb_mode: NbMode::CatM,
+                act_type: AcTType::CatM,
+            },
+            CellConfig::LteNbIot => Cmc {
+                network_mode: NetworkMode::Lte,
+                nb_mode: NbMode::NbIot,
+                act_type: AcTType::NbIot,
+            },
+            CellConfig::GsmCatM => Cmc {
+                network_mode: NetworkMode::Gsm,
+                nb_mode: NbMode::CatM,
+                act_type: AcTType::CatM,
+            },
+            CellConfig::GsmNbIot => Cmc {
+                network_mode: NetworkMode::Gsm,
+                nb_mode: NbMode::NbIot,
+                act_type: AcTType::NbIot,
+            },
+            CellConfig::AutoCatM => Cmc {
+                network_mode: NetworkMode::Automatic,
+                nb_mode: NbMode::CatM,
+                act_type: AcTType::CatM,
+            },
+            CellConfig::AutoNbIot => Cmc {
+                network_mode: NetworkMode::Automatic,
+                nb_mode: NbMode::NbIot,
+                act_type: AcTType::NbIot,
+            },
         }
-
-        cmc
     }
 }
