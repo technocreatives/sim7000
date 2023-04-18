@@ -71,7 +71,7 @@ async fn main(spawner: Spawner) {
     );
 
     defmt::info!("Initializing modem");
-    modem.init().await.unwrap();
+    modem.init(Default::default()).await.unwrap();
 
     defmt::info!("Activating modem");
     modem.activate().await.unwrap();
