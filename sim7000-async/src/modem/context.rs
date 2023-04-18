@@ -19,7 +19,7 @@ pub type TcpRxPipe = Pipe<CriticalSectionRawMutex, 3072>;
 pub type TcpEventChannel = RingChannel<CriticalSectionRawMutex, ConnectionMessage, 8>;
 
 pub struct ModemContext {
-    pub(crate) power_signal: PowerSignal<12>,
+    pub(crate) power_signal: PowerSignal,
     pub(crate) command_lock: Mutex<CriticalSectionRawMutex, ()>,
     pub(crate) commands: Channel<CriticalSectionRawMutex, RawAtCommand, 4>,
     pub(crate) generic_response: Channel<CriticalSectionRawMutex, ResponseCode, 1>,
