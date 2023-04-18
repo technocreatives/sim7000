@@ -8,7 +8,7 @@ use futures::{select_biased, FutureExt};
 use crate::{
     at_command::{
         ate, cbatchk, ccid,
-        cedrxs::{self, AcTType, EDRXSetting},
+        cedrxs::{self, AcTType, EDRXSetting, EdrxCycleLength},
         cfgri::{self, RiPinMode},
         cgmr, cgnapn, cgnspwr, cgnsurc, cgreg, cifsrex, ciicr, cipmux, cipshut,
         cmee::{self, CMEErrorMode},
@@ -105,7 +105,7 @@ impl<'c, P: ModemPower> Modem<'c, P> {
         Ok((modem, io_pump, tx_pump, rx_pump, drop_pump))
     }
 
-    pub async fn init(&mut self, registration_config: RegistrationConfig) -> Result<(), Error> {
+    pub async fn init(&mut self, config: RegistrationConfig) -> Result<(), Error> {
         log::info!("initializing modem");
         self.deactivate().await;
         with_timeout(MODEM_POWER_TIMEOUT, self.power.enable()).await?;
@@ -143,8 +143,6 @@ impl<'c, P: ModemPower> Modem<'c, P> {
             }
         }
 
-        let cmc = Cmc::from(registration_config.cell_config);
-
         commands.run(csclk::SetSlowClock(true)).await?;
         commands.run(At).await?;
         commands.run(ipr::SetBaudRate(BaudRate::Hz115200)).await?;
@@ -152,17 +150,14 @@ impl<'c, P: ModemPower> Modem<'c, P> {
         commands
             .run(cmee::ConfigureCMEErrors(CMEErrorMode::Numeric))
             .await?;
-        commands.run(cnmp::SetNetworkMode(cmc.network_mode)).await?;
-        commands.run(cmnb::SetNbMode(cmc.nb_mode)).await?;
+        commands
+            .run(cnmp::SetNetworkMode(config.network_mode))
+            .await?;
+        commands.run(cmnb::SetNbMode(config.nb_mode)).await?;
         commands.run(cfgri::ConfigureRiPin(RiPinMode::On)).await?;
         commands.run(cbatchk::EnableVBatCheck(true)).await?;
 
-        let configure_edrx = cedrxs::ConfigureEDRX {
-            n: registration_config.edrx_setting,
-            act_type: cmc.act_type,
-            requested_edrx_value: 0b0000,
-        };
-
+        let configure_edrx = cedrxs::ConfigureEDRX::from(config.edrx);
         for _ in 0..5 {
             match commands.run(configure_edrx).await {
                 Ok(_) => break,
@@ -393,74 +388,54 @@ impl<'c, P: ModemPower> Modem<'c, P> {
     }
 }
 
-/// Configure cellular mobile communication and edrx (add more as needed)
-///
-/// Provides a deafault function that configures the modem to:
-/// * Automatically choose between LTE/GSM with CatM
-/// * EDRX enabled
+/// Configure cellular mobile communication and edrx.
 pub struct RegistrationConfig {
-    pub cell_config: CellConfig,
-    pub edrx_setting: EDRXSetting,
+    pub network_mode: NetworkMode,
+    pub nb_mode: NbMode,
+    pub edrx: EDRXConfig,
 }
 
-impl RegistrationConfig {
-    pub fn default() -> Self {
+/// Configuration of Extended Discontinuous Reception mode
+pub enum EDRXConfig {
+    Disabled,
+    Enabled {
+        auto_report: bool,
+        act_type: AcTType,
+        cycle_length: EdrxCycleLength,
+    },
+}
+
+impl Default for RegistrationConfig {
+    fn default() -> Self {
         RegistrationConfig {
-            cell_config: CellConfig::AutoCatM,
-            edrx_setting: EDRXSetting::Enable,
+            network_mode: NetworkMode::Automatic,
+            nb_mode: NbMode::Both,
+            edrx: EDRXConfig::Disabled,
         }
     }
 }
 
-/// Cellular mobile communication
-struct Cmc {
-    network_mode: NetworkMode,
-    nb_mode: NbMode,
-    act_type: AcTType,
-}
-
-pub enum CellConfig {
-    LteCatM,
-    LteNbIot,
-    GsmCatM,
-    GsmNbIot,
-    AutoCatM,
-    AutoNbIot,
-}
-
-impl Cmc {
-    /// Parse Cmc from CellConfig
-    fn from(cell_config: CellConfig) -> Self {
-        match cell_config {
-            CellConfig::LteCatM => Cmc {
-                network_mode: NetworkMode::Lte,
-                nb_mode: NbMode::CatM,
+impl From<EDRXConfig> for cedrxs::ConfigureEDRX {
+    fn from(value: EDRXConfig) -> Self {
+        match value {
+            EDRXConfig::Disabled => cedrxs::ConfigureEDRX {
+                n: EDRXSetting::Disable,
+                // these values don't matter.
                 act_type: AcTType::CatM,
+                requested_edrx_value: EdrxCycleLength::_5,
             },
-            CellConfig::LteNbIot => Cmc {
-                network_mode: NetworkMode::Lte,
-                nb_mode: NbMode::NbIot,
-                act_type: AcTType::NbIot,
-            },
-            CellConfig::GsmCatM => Cmc {
-                network_mode: NetworkMode::Gsm,
-                nb_mode: NbMode::CatM,
-                act_type: AcTType::CatM,
-            },
-            CellConfig::GsmNbIot => Cmc {
-                network_mode: NetworkMode::Gsm,
-                nb_mode: NbMode::NbIot,
-                act_type: AcTType::NbIot,
-            },
-            CellConfig::AutoCatM => Cmc {
-                network_mode: NetworkMode::Automatic,
-                nb_mode: NbMode::CatM,
-                act_type: AcTType::CatM,
-            },
-            CellConfig::AutoNbIot => Cmc {
-                network_mode: NetworkMode::Automatic,
-                nb_mode: NbMode::NbIot,
-                act_type: AcTType::NbIot,
+            EDRXConfig::Enabled {
+                auto_report,
+                act_type,
+                cycle_length,
+            } => cedrxs::ConfigureEDRX {
+                n: if auto_report {
+                    EDRXSetting::EnableWithAutoReport
+                } else {
+                    EDRXSetting::Enable
+                },
+                act_type,
+                requested_edrx_value: cycle_length,
             },
         }
     }
