@@ -266,9 +266,11 @@ impl<'c, P: ModemPower> Modem<'c, P> {
         let wait_for_registration = async move {
             loop {
                 commands.run(cgreg::GetRegistrationStatus).await?;
-                match self.context.registration_events.wait().await {
+                let status = self.context.registration_events.wait().await;
+                match status {
                     RegistrationStatus::RegisteredHome | RegistrationStatus::RegisteredRoaming => {
-                        break
+                        log::info!("registration status: {:?}", status);
+                        break;
                     }
                     _ => Timer::after(Duration::from_millis(200)).await,
                 }

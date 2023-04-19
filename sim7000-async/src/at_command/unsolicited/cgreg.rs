@@ -19,9 +19,22 @@ impl AtParseLine for RegistrationStatus {
             return Err("Missing '+CGREG'".into());
         }
 
+        let len = 1 + rest.chars().filter(|&c| c == ',').count();
+
+        let stat_i = match len {
+            // URC variant
+            // <stat>[,<lac>,<ci>,<netact>]
+            1 | 4 => 0,
+
+            // Regular variant
+            // <n>,<stat>[,<lac>,<ci>,<netact>[,[<Active-Time>],[<Periodic-RAU>],[<GPRS-READY-timer>]]]
+            2 | 5 | 8 => 1,
+            _ => return Err("Invalid number of elements".into()),
+        };
+
         let stat = rest
             .split(',')
-            .nth(1)
+            .nth(stat_i)
             .ok_or("Missing ','")?
             .parse::<i32>()?;
 
