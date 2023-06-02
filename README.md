@@ -1,25 +1,14 @@
+***NOTE***: *This sim7000 driver is no longer under development.*
+*See the main branch for the new, async, driver.*
+*This old driver will be archived on this branch for the time being.*
+
+----------
+
 # sim7000
 
 This crate provides drivers for the SIM7000 series of chips. The current code implements enough commands to bring up a TCP connection and run GPS.
 
 This crate runs on `no_std` and requires nightly Rust (see `rust-toolchain.toml`).
-
-
-# Getting Started
-
-This project relies on `probe-run`: https://github.com/knurling-rs/probe-run
-
-Install it via:
-
-`cargo install probe-run`
-
-Add target toolchain:
-
-`rustup target add thumbv7em-none-eabihf`
-
-The following ENV VARS need to be set:
-
-DEFMT_LOG=info
 
 ## License
 
