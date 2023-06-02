@@ -22,5 +22,5 @@ futures = { version = "0.3.17", default-features = false }
 heapless = "0.7.15"
 panic-rtt-target = { version = "0.1.1", features = ["cortex-m"] }
 rtt-target = { version = "0.3.0", features = ["cortex-m"] }
-sim7000-async = { path = "../../sim7000-async", default-features = false, features = ["defmt"] }
+sim7000-async = { path = "../../", default-features = false, features = ["defmt"] }
 

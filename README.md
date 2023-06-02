@@ -1,25 +1,21 @@
-# sim7000
+# sim7000_async
 
-This crate provides drivers for the SIM7000 series of chips. The current code implements enough commands to bring up a TCP connection and run GPS.
+This crate provides an [embassy][embassy] driver for the SIM7000 series of modem chips.
 
-This crate runs on `no_std` and requires nightly Rust (see `rust-toolchain.toml`).
+*If you are looking for the old synchronous sim7000 driver, it has been archived [here][old-driver].*
 
+**Supported features**:
+- [X] TCP connections
+- [X] GPS
+- [ ] UDP connections
+- [ ] SMS
+- [ ] A bunch more the other things that the SIM7000 supports
 
-# Getting Started
+This crate runs on `no_std` and, like embassy, requires nightly Rust (see `rust-toolchain.toml`).
+See the `samples` directory for examples.
 
-This project relies on `probe-run`: https://github.com/knurling-rs/probe-run
-
-Install it via:
-
-`cargo install probe-run`
-
-Add target toolchain:
-
-`rustup target add thumbv7em-none-eabihf`
-
-The following ENV VARS need to be set:
-
-DEFMT_LOG=info
+[embassy]: https://embassy.dev/
+[old-driver]: https://github.com/technocreatives/sim7000/tree/old-sync-driver
 
 ## License
 
