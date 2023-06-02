@@ -1,16 +1,25 @@
-on: [push, delete]
 name: Mirroring
+
+on:
+  push:
+    branches: ['main']
 
 jobs:
   to_gitlab:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
-        with:
-          fetch-depth: 0
-      - uses: pixta-dev/repository-mirroring-action@v1
-        with:
-          target_repo_url:
-            git@thetc.dev:rust-shared/sim7000.git
-          ssh_private_key:
-            ${{ secrets.GITLAB_SSH_PRIVATE_KEY }}
+      - shell: bash
+        env:
+          SSH_KEY: ${{ secrets.GITLAB_SSH_PRIVATE_KEY }}
+        run: |
+
+          echo "$SSH_KEY" > ~/ssh.key; chmod 600 ~/ssh.key
+          export GIT_SSH_COMMAND="ssh -i ~/ssh.key -o StrictHostKeyChecking=no"
+
+          git clone git@thetc.dev:rust-shared/sim7000.git
+          cd sim7000
+
+          git remote add --fetch upstream "https://github.com/technocreatives/sim7000.git"
+          git rebase upstream/main
+          git push -f
+
