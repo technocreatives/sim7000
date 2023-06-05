@@ -16,6 +16,9 @@ jobs:
           echo "$SSH_KEY" > ~/ssh.key; chmod 600 ~/ssh.key
           export GIT_SSH_COMMAND="ssh -i ~/ssh.key -o StrictHostKeyChecking=no"
 
+          git config --global user.email "hej@technocreatives.com"
+          git config --global user.name "Techno Bot"
+
           git clone git@thetc.dev:rust-shared/sim7000.git
           cd sim7000
 
