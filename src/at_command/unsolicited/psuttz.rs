@@ -1,4 +1,8 @@
-use crate::{at_command::{AtParseErr, AtParseLine}, collect_array};
+use crate::log;
+use crate::{
+    at_command::{AtParseErr, AtParseLine},
+    collect_array,
+};
 
 /// Refresh network time and timezone
 #[derive(Debug)]
@@ -15,7 +19,7 @@ impl AtParseLine for Psuttz {
 
         log::warn!("unimplemented: {:?}", line);
 
-        let [year, month, day, hour, min, sec, timezone,dst] =
+        let [year, month, day, hour, min, sec, timezone, dst] =
             collect_array(rest.splitn(7, ',')).ok_or("Missing ','")?;
 
         Ok(Psuttz)

@@ -1,4 +1,8 @@
-use crate::{at_command::{AtParseErr, AtParseLine}, collect_array};
+use crate::log;
+use crate::{
+    at_command::{AtParseErr, AtParseLine},
+    collect_array,
+};
 
 /// Refresh network name
 #[derive(Debug)]
