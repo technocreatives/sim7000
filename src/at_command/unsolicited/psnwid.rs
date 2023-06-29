@@ -1,5 +1,5 @@
-use crate::log;
 use crate::{
+    log,
     at_command::{AtParseErr, AtParseLine},
     collect_array,
 };

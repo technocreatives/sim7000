@@ -21,6 +21,7 @@ futures = { version = "0.3", default-features = false, features = ["async-await"
 log = { version = "0.4", optional = true }
 defmt = { version = "0.3.2", optional = true }
 critical-section = "0.2.7"
+chrono = { version = "0.4", default-features = false }
 
 [features]
 default = ["log"]

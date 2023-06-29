@@ -16,7 +16,7 @@ use super::{AtRequest, GenericOk};
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum TimestampUsc {
     Enable,
-    Disable
+    Disable,
 }
 
 impl AtRequest for TimestampUsc {
@@ -25,9 +25,7 @@ impl AtRequest for TimestampUsc {
         match self {
             TimestampUsc::Enable => "AT+CLTS=1\r",
             TimestampUsc::Disable => "AT+CLTS=0\r",
-        }.into()
+        }
+        .into()
     }
 }
-
-
-
