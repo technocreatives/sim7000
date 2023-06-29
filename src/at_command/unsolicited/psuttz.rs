@@ -1,5 +1,4 @@
 use crate::{
-    log,
     at_command::{unsolicited::Dst, AtParseErr, AtParseLine},
     collect_array,
 };
@@ -9,6 +8,7 @@ use chrono::{DateTime, FixedOffset, NaiveDate};
 #[derive(Debug, PartialEq)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct Psuttz {
+    #[cfg_attr(feature = "defmt", defmt(Debug2Format))]
     datetime: DateTime<FixedOffset>,
 
     /// Daylight savings time
@@ -22,8 +22,6 @@ impl AtParseLine for Psuttz {
         if message != "*PSUTTZ" {
             return Err("Missing *PSUTTZ prefix".into());
         }
-
-        log::warn!("unimplemented: {:?}", line);
 
         let [ymd, hms, timezone, dst] = collect_array(rest.splitn(7, ',')).ok_or("Missing ','")?;
 
@@ -57,10 +55,14 @@ impl AtParseLine for Psuttz {
             .latest()
             .ok_or("Invalid time-tz combo")?;
 
+        #[cfg(feature = "defmt")]
+        defmt::warn!("unimplemented: {:?}", defmt::Debug2Format(&datetime));
+
         Ok(Psuttz {
             datetime,
             dst: Dst::try_from_u8(dst.parse()?)?,
         })
+
     }
 }
 
