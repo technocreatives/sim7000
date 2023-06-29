@@ -8,6 +8,15 @@ pub struct Ctzv;
 
 impl AtParseLine for Ctzv {
     fn from_line(line: &str) -> Result<Self, AtParseErr> {
-        stub_parser_prefix(line, "+CTZV:", Ctzv)
+        let (message, rest) = line.split_once(": ").ok_or("Missing ': '")?;
+
+        if message != "+CTZV" {
+            return Err("Missing +CTZV prefix".into());
+        }
+
+        let timezone = rest; // TODO: how to parse this?
+        log::warn!("unimplemented: {:?}", line);
+
+        Ok(Ctzv)
     }
 }

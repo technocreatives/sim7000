@@ -27,6 +27,7 @@ pub mod cipsend;
 pub mod cipshut;
 pub mod cipsprt;
 pub mod cipstart;
+pub mod clts;
 pub mod cmee;
 pub mod cmnb;
 pub mod cnmp;

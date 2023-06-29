@@ -43,7 +43,7 @@ pub use cusd::CUsd;
 pub use dst::Dst;
 pub use pdp::GprsDisconnected;
 pub use power_down::PowerDown;
-pub use psnwid::Pdnwid;
+pub use psnwid::Psnwid;
 pub use psuttz::Psuttz;
 pub use rdy::Ready;
 pub use receive::ReceiveHeader;
@@ -71,7 +71,7 @@ pub enum Urc {
     Dst(Dst),
     GnssReport(GnssReport),
     GprsDisconnected(GprsDisconnected),
-    Pdnwid(Pdnwid),
+    Psnwid(Psnwid),
     PowerDown(PowerDown),
     Psuttz(Psuttz),
     Ready(Ready),
@@ -107,7 +107,7 @@ impl AtParseLine for Urc {
             .or_else(parse(line, Urc::Dst))
             .or_else(parse(line, Urc::GnssReport))
             .or_else(parse(line, Urc::GprsDisconnected))
-            .or_else(parse(line, Urc::Pdnwid))
+            .or_else(parse(line, Urc::Psnwid))
             .or_else(parse(line, Urc::PowerDown))
             .or_else(parse(line, Urc::Psuttz))
             .or_else(parse(line, Urc::Ready))
