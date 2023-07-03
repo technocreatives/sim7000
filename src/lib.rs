@@ -1,5 +1,6 @@
 #![no_std]
 #![feature(type_alias_impl_trait)]
+#![feature(impl_trait_in_assoc_type)]
 #![allow(clippy::unnecessary_lazy_evaluations)]
 #![allow(clippy::single_component_path_imports)]
 // large enum variants are unavoidable in no_std, since we can't box things
