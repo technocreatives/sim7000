@@ -3,8 +3,7 @@ use core::sync::atomic::{AtomicBool, Ordering};
 use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, pubsub::PubSubChannel};
 use embassy_time::{with_timeout, Duration, TimeoutError, Timer};
 use embedded_io_async::{
-    {Read, Write},
-    ErrorType,
+    ErrorType, {Read, Write},
 };
 use futures::{select_biased, FutureExt};
 
