@@ -25,5 +25,4 @@ jobs:
           git remote add --fetch upstream "https://github.com/technocreatives/sim7000.git"
           git rebase upstream/main
           git push -f
-          git push --tags
 
