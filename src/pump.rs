@@ -8,7 +8,7 @@ use embassy_sync::{
     signal::Signal,
 };
 use embassy_time::{with_timeout, Duration};
-use embedded_io::asynch::{Read, Write};
+use embedded_io_async::{Read, Write};
 use futures::{select_biased, FutureExt};
 use heapless::Vec;
 

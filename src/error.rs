@@ -15,9 +15,16 @@ pub enum Error {
     NoApn,
 }
 
-impl embedded_io::Error for Error {
-    fn kind(&self) -> embedded_io::ErrorKind {
-        embedded_io::ErrorKind::Other
+impl embedded_io_async::Error for Error {
+    fn kind(&self) -> embedded_io_async::ErrorKind {
+        match self {
+            Error::InvalidUtf8 => embedded_io_async::ErrorKind::InvalidData,
+            Error::BufferOverflow => embedded_io_async::ErrorKind::OutOfMemory,
+            Error::Sim(_) => embedded_io_async::ErrorKind::Other,
+            Error::Timeout => embedded_io_async::ErrorKind::TimedOut,
+            Error::Serial => embedded_io_async::ErrorKind::Other,
+            Error::NoApn => embedded_io_async::ErrorKind::Other,
+        }
     }
 }
 

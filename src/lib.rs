@@ -30,7 +30,7 @@ compile_error!("'log' and 'defmt' features are mutually exclusive");
 compile_error!("please enable a logging feature, e.g. 'log' or 'defmt'");
 #[cfg(feature = "defmt")]
 pub(crate) use defmt as log;
-use embedded_io::asynch::{Read, Write};
+use embedded_io_async::{Read, Write};
 #[cfg(feature = "log")]
 pub(crate) use log;
 

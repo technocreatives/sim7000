@@ -2,9 +2,9 @@ use cipstart::ConnectMode;
 use core::sync::atomic::{AtomicBool, Ordering};
 use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, pubsub::PubSubChannel};
 use embassy_time::{with_timeout, Duration, TimeoutError, Timer};
-use embedded_io::{
-    asynch::{Read, Write},
-    Io,
+use embedded_io_async::{
+    {Read, Write},
+    ErrorType,
 };
 use futures::{select_biased, FutureExt};
 
@@ -28,6 +28,16 @@ pub enum TcpError {
     Closed,
 }
 
+impl embedded_io_async::Error for TcpError {
+    fn kind(&self) -> embedded_io_async::ErrorKind {
+        match self {
+            TcpError::Timeout => embedded_io_async::ErrorKind::TimedOut,
+            TcpError::SendFail => embedded_io_async::ErrorKind::Other,
+            TcpError::Closed => embedded_io_async::ErrorKind::Other,
+        }
+    }
+}
+
 #[derive(Debug)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum ConnectError {
@@ -36,12 +46,6 @@ pub enum ConnectError {
 
     /// The modem gave an unexpected response
     Unexpected(ConnectionMessage),
-}
-
-impl embedded_io::Error for TcpError {
-    fn kind(&self) -> embedded_io::ErrorKind {
-        embedded_io::ErrorKind::Other
-    }
 }
 
 impl From<crate::Error> for ConnectError {
@@ -73,13 +77,13 @@ pub struct TcpWriter<'s> {
     stream: &'s TcpStream<'s>,
 }
 
-impl Io for TcpStream<'_> {
+impl ErrorType for TcpStream<'_> {
     type Error = TcpError;
 }
-impl Io for TcpWriter<'_> {
+impl ErrorType for TcpWriter<'_> {
     type Error = TcpError;
 }
-impl Io for TcpReader<'_> {
+impl ErrorType for TcpReader<'_> {
     type Error = TcpError;
 }
 

@@ -1,6 +1,6 @@
 use core::str::from_utf8;
 use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, pipe::Reader};
-use embedded_io::asynch::Read;
+use embedded_io_async::Read;
 use heapless::{String, Vec};
 
 use crate::{log, Error};
