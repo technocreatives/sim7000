@@ -10,14 +10,17 @@ use crate::{
         ate, cbatchk, ccid,
         cedrxs::{self, AcTType, EDRXSetting, EdrxCycleLength},
         cfgri::{self, RiPinMode},
-        cgmr, cgnapn, cgnspwr, cgnsurc, cgreg, cifsrex, ciicr, cipmux, cipshut,
+        cgmr, cgnapn,
+        cgnsmod::{self, WorkMode},
+        cgnspwr, cgnsurc, cgreg, cifsrex, ciicr, cipmux, cipshut,
         cmee::{self, CMEErrorMode},
         cmnb::{self, NbMode},
         cnmp, cops, cpsi, csclk, csq, cstt,
+        httptofs::StatusCode,
         ifc::{self, FlowControl},
         ipr::{self, BaudRate},
         unsolicited::{NetworkRegistration, RegistrationStatus},
-        At, AtRequest, NetworkMode,
+        At, AtRequest, NetworkMode, BearerSettings,
     },
     gnss::Gnss,
     log,
@@ -346,12 +349,137 @@ impl<'c, P: ModemPower> Modem<'c, P> {
             })
             .await?;
 
+        // Galilean seems to be off by default
+        self.commands
+            .lock()
+            .await
+            .run(cgnsmod::SetGnssWorkModeSet(
+                WorkMode::Start,
+                WorkMode::Start,
+                WorkMode::Start,
+            ))
+            .await?;
+
         Ok(Some(Gnss::new(
             reports,
             self.context.power_signal.subscribe(),
             &self.context.drop_channel,
             Duration::from_secs(20),
         )))
+    }
+
+    /// Sync the network time protocol
+    pub async fn sync_ntp(&mut self, ntp_server: &str, timezone: u16) -> Result<(), Error> {
+        let apn = self.apn.as_ref().ok_or(Error::NoApn)?.clone();
+
+        let commands = self.commands.lock().await;
+
+        commands
+            .run(BearerSettings {
+                cmd_type: crate::at_command::CmdType::SetBearerParameters,
+                con_param_type: crate::at_command::ConParamType::Apn,
+                apn: apn.clone(),
+            })
+            .await?;
+        commands
+            .run(BearerSettings {
+                cmd_type: crate::at_command::CmdType::OpenBearer,
+                con_param_type: crate::at_command::ConParamType::Apn,
+                apn,
+            })
+            .await?;
+        commands
+            .run(crate::at_command::cntpcid::SetGprsBearerProfileId(1))
+            .await?;
+        commands
+            .run(crate::at_command::cntp::SynchronizeNetworkTime {
+                ntp_server: ntp_server.into(),
+                timezone,
+                cid: 1,
+            })
+            .await?;
+        commands.run(crate::at_command::cntp::Execute).await?;
+
+        Ok(())
+    }
+
+    /// According to docs, you should first [sync_ntp]
+    pub async fn download_xtra(&mut self, url: &str) -> Result<(), Error> {
+        self.commands
+            .lock()
+            .await
+            .run(crate::at_command::cnact::SetAppNetwork {
+                mode: crate::at_command::cnact::CnactMode::Active,
+                apn: self.apn.as_ref().ok_or(Error::NoApn)?.clone(),
+            })
+            .await?;
+
+        // sometimes we aren't able to download the file the first couple of times
+        for _ in 0..5 {
+            match self
+                .commands
+                .lock()
+                .await
+                .run(crate::at_command::httptofs::DownloadToFileSystem {
+                    // unclear which xtra file to use, the size differs depending on server
+                    // so they might contain more/different data or different sattelite networks
+                    // also, sometimes the server is scuffed
+                    url: url.into(),
+                    file_path: "/customer/xtra3grc.bin".into(),
+                })
+                .await
+            {
+                Ok(res) => {
+                    if res.1.status_code == StatusCode::Ok {
+                        break;
+                    }
+                    log::warn!("{:?}", res);
+                }
+                Err(e) => log::warn!("{:?}", e),
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Enable the use of XTRA file for faster, more accurate fix.
+    ///
+    /// Before calling this function, make sure the XTRA file has been downloaded. [download_extra]
+    pub async fn cold_start_with_xtra(&mut self) -> Result<(), Error> {
+        match self
+            .commands
+            .lock()
+            .await
+            .run(crate::at_command::cgnscpy::CopyXtraFile)
+            .await?
+            .0
+            .is_success()
+        {
+            Ok(()) => {}
+            Err(e) => log::warn!("copy extra: {}", e),
+        }
+        self.commands
+            .lock()
+            .await
+            .run(crate::at_command::cgnsxtra::GnssXtra(
+                crate::at_command::cgnsxtra::ToggleXtra::Enable,
+            ))
+            .await?;
+
+        match self
+            .commands
+            .lock()
+            .await
+            .run(crate::at_command::cgnscold::GnssColdStart)
+            .await?
+            .1
+            .is_success()
+        {
+            Ok(()) => {}
+            Err(e) => log::warn!("couldn't start with xtra: {:?}", e),
+        }
+
+        Ok(())
     }
 
     pub async fn claim_voltage_warner(&mut self) -> Option<VoltageWarner<'c>> {
