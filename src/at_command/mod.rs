@@ -16,8 +16,12 @@ pub mod cedrxs;
 pub mod cfgri;
 pub mod cgmr;
 pub mod cgnapn;
+pub mod cgnscold;
+pub mod cgnscpy;
+pub mod cgnsmod;
 pub mod cgnspwr;
 pub mod cgnsurc;
+pub mod cgnsxtra;
 pub mod cgreg;
 pub mod cifsrex;
 pub mod ciicr;
@@ -29,14 +33,19 @@ pub mod cipsprt;
 pub mod cipstart;
 pub mod cmee;
 pub mod cmnb;
+pub mod cnact;
 pub mod cnmp;
+pub mod cntp;
+pub mod cntpcid;
 pub mod cops;
 pub mod cpsi;
 pub mod csclk;
 pub mod csq;
 pub mod cstt;
+pub mod httptofs;
 pub mod ifc;
 pub mod ipr;
+pub mod sapbr;
 
 pub use at::At;
 pub use ate::SetEcho;
@@ -46,8 +55,12 @@ pub use cedrxs::{AcTType, ConfigureEDRX, EDRXSetting};
 pub use cfgri::{ConfigureRiPin, RiPinMode};
 pub use cgmr::{FwVersion, GetFwVersion};
 pub use cgnapn::{GetNetworkApn, NetworkApn};
+pub use cgnscold::GnssColdStart;
+pub use cgnscpy::CopyXtraFile;
+pub use cgnsmod::{GetGnssWorkModeSet, SetGnssWorkModeSet};
 pub use cgnspwr::SetGnssPower;
 pub use cgnsurc::ConfigureGnssUrc;
+pub use cgnsxtra::{GnssXtra, ToggleXtra};
 pub use cgreg::{ConfigureRegistrationUrc, GetRegistrationStatus};
 pub use cifsrex::{GetLocalIpExt, IpExt};
 pub use ciicr::StartGprs;
@@ -59,14 +72,23 @@ pub use cipsprt::SetCipSendPrompt;
 pub use cipstart::{Connect, ConnectMode};
 pub use cmee::{CMEErrorMode, ConfigureCMEErrors};
 pub use cmnb::{NbMode, SetNbMode};
+pub use cnact::{CnactMode, SetAppNetwork};
 pub use cnmp::{NetworkMode, SetNetworkMode};
+pub use cntp::{Execute, SynchronizeNetworkTime};
+pub use cntpcid::SetGprsBearerProfileId;
 pub use cops::{GetOperatorInfo, OperatorFormat, OperatorInfo, OperatorMode};
 pub use cpsi::{GetSystemInfo, SystemInfo, SystemMode};
 pub use csclk::SetSlowClock;
 pub use csq::{GetSignalQuality, SignalQuality};
 pub use cstt::StartTask;
+pub use httptofs::DownloadToFileSystem;
 pub use ifc::{FlowControl, SetFlowControl};
 pub use ipr::{BaudRate, SetBaudRate};
+pub use sapbr::{BearerSettings, CmdType, ConParamType};
+
+use self::{
+    cgnscold::XtraStatus, cgnscpy::CopyResponse, cntp::NetworkTime, httptofs::DownloadInfo,
+};
 
 #[derive(Clone, Copy, Default, Debug)]
 pub(crate) struct AtParseErr {
@@ -109,6 +131,10 @@ pub enum ResponseCode {
     OperatorInfo(OperatorInfo),
     FwVersion(FwVersion),
     NetworkApn(NetworkApn),
+    NetworkTime(NetworkTime),
+    DownloadInfo(DownloadInfo),
+    CopyResponse(CopyResponse),
+    XtraStatus(XtraStatus),
 }
 
 impl AtParseLine for ResponseCode {
@@ -133,6 +159,10 @@ impl AtParseLine for ResponseCode {
             .or_else(parse(line, ResponseCode::OperatorInfo))
             .or_else(parse(line, ResponseCode::FwVersion))
             .or_else(parse(line, ResponseCode::NetworkApn))
+            .or_else(parse(line, ResponseCode::NetworkTime))
+            .or_else(parse(line, ResponseCode::DownloadInfo))
+            .or_else(parse(line, ResponseCode::CopyResponse))
+            .or_else(parse(line, ResponseCode::XtraStatus))
             .map_err(|_| "Unknown response code".into())
     }
 }
