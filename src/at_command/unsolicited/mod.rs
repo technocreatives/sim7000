@@ -31,7 +31,7 @@ pub use app_pdp::AppNetworkActive;
 pub use cbm::Cbm;
 pub use cds::Cds;
 pub use cfun::CFun;
-pub use cgreg::RegistrationStatus;
+pub use cgreg::{NetworkRegistration, RegistrationStatus};
 pub use cmt::Cmt;
 pub use cmti::Cmti;
 pub use connection::{Connection, ConnectionMessage};
@@ -77,7 +77,7 @@ pub enum Urc {
     Ready(Ready),
     SmsReady(SmsReady),
     ReceiveHeader(ReceiveHeader),
-    RegistrationStatus(RegistrationStatus),
+    NetworkRegistration(NetworkRegistration),
     VoltageWarning(VoltageWarning),
 }
 
@@ -113,7 +113,7 @@ impl AtParseLine for Urc {
             .or_else(parse(line, Urc::Ready))
             .or_else(parse(line, Urc::SmsReady))
             .or_else(parse(line, Urc::ReceiveHeader))
-            .or_else(parse(line, Urc::RegistrationStatus))
+            .or_else(parse(line, Urc::NetworkRegistration))
             .or_else(parse(line, Urc::VoltageWarning))
             .map_err(|_| AtParseErr::from("Failed to parse as a URC"))
     }

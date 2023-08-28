@@ -8,7 +8,7 @@ use crate::slot::Slot;
 use crate::tcp::CONNECTION_SLOTS;
 use crate::{
     at_command::{
-        unsolicited::{ConnectionMessage, GnssReport, RegistrationStatus, VoltageWarning},
+        unsolicited::{ConnectionMessage, GnssReport, NetworkRegistration, VoltageWarning},
         ResponseCode,
     },
     util::RingChannel,
@@ -25,7 +25,7 @@ pub struct ModemContext {
     pub(crate) generic_response: Channel<CriticalSectionRawMutex, ResponseCode, 1>,
     pub(crate) drop_channel: DropChannel,
     pub(crate) tcp: TcpContext,
-    pub(crate) registration_events: Signal<CriticalSectionRawMutex, RegistrationStatus>,
+    pub(crate) registration_events: Signal<CriticalSectionRawMutex, NetworkRegistration>,
     pub(crate) gnss_slot: Slot<Signal<CriticalSectionRawMutex, GnssReport>>,
     pub(crate) voltage_slot: Slot<Signal<CriticalSectionRawMutex, VoltageWarning>>,
     pub(crate) tx_pipe: Pipe<CriticalSectionRawMutex, 2048>,

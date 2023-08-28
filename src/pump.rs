@@ -13,7 +13,9 @@ use futures::{select_biased, FutureExt};
 use heapless::Vec;
 
 use crate::at_command::{
-    unsolicited::{GnssReport, PowerDown, RegistrationStatus, Urc, VoltageWarning},
+    unsolicited::{
+        GnssReport, NetworkRegistration, PowerDown, RegistrationStatus, Urc, VoltageWarning,
+    },
     AtParseLine, ResponseCode,
 };
 use crate::log;
@@ -38,7 +40,7 @@ pub struct RxPump<'context> {
     pub(crate) tcp: &'context TcpContext,
     pub(crate) gnss: &'context Signal<CriticalSectionRawMutex, GnssReport>,
     pub(crate) voltage_warning: &'context Signal<CriticalSectionRawMutex, VoltageWarning>,
-    pub(crate) registration_events: &'context Signal<CriticalSectionRawMutex, RegistrationStatus>,
+    pub(crate) registration_events: &'context Signal<CriticalSectionRawMutex, NetworkRegistration>,
 }
 
 impl<'context> Pump for RxPump<'context> {
@@ -60,7 +62,7 @@ impl<'context> Pump for RxPump<'context> {
 
                 log::debug!("Got URC: {:?}", line.as_str());
                 match message {
-                    Urc::RegistrationStatus(status) => {
+                    Urc::NetworkRegistration(status) => {
                         self.registration_events.signal(status);
                     }
                     Urc::ReceiveHeader(header) => {
@@ -287,12 +289,12 @@ impl<'context, RW: 'static + BuildIo> Pump for RawIoPump<'context, RW> {
 }
 
 pub struct RegistrationHandler<'context> {
-    context: &'context Signal<CriticalSectionRawMutex, RegistrationStatus>,
+    context: &'context Signal<CriticalSectionRawMutex, NetworkRegistration>,
 }
 
 impl<'context> RegistrationHandler<'context> {
     pub async fn pump(&mut self) {
-        match self.context.wait().await {
+        match self.context.wait().await.status {
             RegistrationStatus::NotRegistered
             | RegistrationStatus::Searching
             | RegistrationStatus::RegistrationDenied
