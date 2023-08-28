@@ -62,8 +62,9 @@ impl<'context> Pump for RxPump<'context> {
 
                 log::debug!("Got URC: {:?}", line.as_str());
                 match message {
-                    Urc::NetworkRegistration(status) => {
-                        self.registration_events.signal(status);
+                    Urc::NetworkRegistration(registration) => {
+                        log::info!("registration status: {:?}", registration);
+                        self.registration_events.signal(registration);
                     }
                     Urc::ReceiveHeader(header) => {
                         let mut length = header.length;

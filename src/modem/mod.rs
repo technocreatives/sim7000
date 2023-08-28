@@ -270,7 +270,7 @@ impl<'c, P: ModemPower> Modem<'c, P> {
                 let registration = self.context.registration_events.wait().await;
                 match registration.status {
                     RegistrationStatus::RegisteredHome | RegistrationStatus::RegisteredRoaming => {
-                        log::info!("registration status: {:?}", registration);
+                        log::info!("registered to network");
                         break;
                     }
                     _ => Timer::after(Duration::from_millis(200)).await,
