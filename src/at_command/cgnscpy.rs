@@ -1,6 +1,8 @@
 use core::fmt::Write;
 use heapless::String;
 
+use crate::{error::Xtra, Error};
+
 use super::{AtParseErr, AtParseLine, AtRequest, AtResponse, GenericOk, ResponseCode};
 
 /// AT+CGNSCPY=...
@@ -25,10 +27,10 @@ pub enum CopyResponse {
 }
 
 impl CopyResponse {
-    pub fn is_success(&mut self) -> Result<(), &str> {
+    pub fn success(&mut self) -> Result<(), Error> {
         match self {
             CopyResponse::Success => Ok(()),
-            CopyResponse::FileDoesntExist => Err("File doesn't exist"),
+            CopyResponse::FileDoesntExist => Err(Error::Xtra(Xtra::FileDoesntExist)),
         }
     }
 }

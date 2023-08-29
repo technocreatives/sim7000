@@ -353,11 +353,11 @@ impl<'c, P: ModemPower> Modem<'c, P> {
         self.commands
             .lock()
             .await
-            .run(cgnsmod::SetGnssWorkModeSet(
-                WorkMode::Start,
-                WorkMode::Start,
-                WorkMode::Start,
-            ))
+            .run(cgnsmod::SetGnssWorkModeSet {
+                glonass: WorkMode::Start,
+                beidou: WorkMode::Start,
+                galilean: WorkMode::Start,
+            })
             .await?;
 
         Ok(Some(Gnss::new(
@@ -403,7 +403,7 @@ impl<'c, P: ModemPower> Modem<'c, P> {
         Ok(())
     }
 
-    /// According to docs, you should first [sync_ntp]
+    /// According to docs, you should first [Modem::sync_ntp]
     pub async fn download_xtra(&mut self, url: &str) -> Result<(), Error> {
         self.commands
             .lock()
@@ -415,49 +415,42 @@ impl<'c, P: ModemPower> Modem<'c, P> {
             .await?;
 
         // sometimes we aren't able to download the file the first couple of times
+        let mut res = Ok(());
         for _ in 0..5 {
-            match self
+            res = self
                 .commands
                 .lock()
                 .await
                 .run(crate::at_command::httptofs::DownloadToFileSystem {
                     // unclear which xtra file to use, the size differs depending on server
-                    // so they might contain more/different data or different sattelite networks
+                    // so they might contain more/different data or different satellite networks
                     // also, sometimes the server is scuffed
                     url: url.into(),
                     file_path: "/customer/xtra3grc.bin".into(),
                 })
-                .await
-            {
-                Ok(res) => {
-                    if res.1.status_code == StatusCode::Ok {
-                        break;
-                    }
-                    log::warn!("{:?}", res);
-                }
-                Err(e) => log::warn!("{:?}", e),
-            }
+                .await?
+                .1
+                .status_code
+                .success()
         }
 
-        Ok(())
+        match res {
+            Ok(()) => Ok(()),
+            Err(e) => Err(Error::Httptofs(e)),
+        }
     }
 
-    /// Enable the use of XTRA file for faster, more accurate fix.
+    /// Enable the use of XTRA file for faster, more accurate GNSS fixes. Similar to assisted gps.
     ///
-    /// Before calling this function, make sure the XTRA file has been downloaded. [download_extra]
+    /// Before calling this function, make sure the XTRA file has been downloaded. [Modem::download_xtra]
     pub async fn cold_start_with_xtra(&mut self) -> Result<(), Error> {
-        match self
-            .commands
+        self.commands
             .lock()
             .await
             .run(crate::at_command::cgnscpy::CopyXtraFile)
             .await?
             .0
-            .is_success()
-        {
-            Ok(()) => {}
-            Err(e) => log::warn!("copy extra: {}", e),
-        }
+            .success()?;
         self.commands
             .lock()
             .await
@@ -466,18 +459,13 @@ impl<'c, P: ModemPower> Modem<'c, P> {
             ))
             .await?;
 
-        match self
-            .commands
+        self.commands
             .lock()
             .await
             .run(crate::at_command::cgnscold::GnssColdStart)
             .await?
             .1
-            .is_success()
-        {
-            Ok(()) => {}
-            Err(e) => log::warn!("couldn't start with xtra: {:?}", e),
-        }
+            .success()?;
 
         Ok(())
     }

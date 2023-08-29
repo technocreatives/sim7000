@@ -42,28 +42,43 @@ impl AtRequest for Execute {
 
 #[derive(Debug)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
+pub enum SyncNtpStatusCode {
+    Success = 1,
+    NetworkError = 61,
+    DnsResolutionError = 62,
+    ConnectionError = 63,
+    ServiceResponseError = 64,
+    ServiceResponseTimeout = 65,
+}
+
+#[derive(Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct NetworkTime {
+    code: SyncNtpStatusCode,
     #[allow(dead_code)]
-    time: String<32>,
+    time: Option<String<32>>,
 }
 
 impl AtParseLine for NetworkTime {
     fn from_line(line: &str) -> Result<Self, AtParseErr> {
         let line = line.strip_prefix("+CNTP: ").ok_or("Missing '+CNTP: '")?;
-        let Some(line) = line.split_once(',') else {
-            return match line {
-                "61" => Err("Network error".into()),
-                "62" => Err("DNS resolution error".into()),
-                "63" => Err("Connection error".into()),
-                "64" => Err("Service response error".into()),
-                "65" => Err("Service response timeout".into()),
-                _ => Err("Unexpected response".into()),
-            }
+
+        let (code, time) = match line.split_once(',') {
+            Some((code, time)) => (code, Some(time.into())),
+            None => (line, None),
         };
 
-        Ok(NetworkTime {
-            time: line.1.into(),
-        })
+        let code = match code {
+            "1" => SyncNtpStatusCode::Success,
+            "61" => SyncNtpStatusCode::NetworkError,
+            "62" => SyncNtpStatusCode::DnsResolutionError,
+            "63" => SyncNtpStatusCode::ConnectionError,
+            "64" => SyncNtpStatusCode::ServiceResponseError,
+            "65" => SyncNtpStatusCode::ServiceResponseTimeout,
+            _ => return Err("Unexpected response".into()),
+        };
+
+        Ok(NetworkTime { code, time })
     }
 }
 

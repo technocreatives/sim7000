@@ -47,6 +47,15 @@ pub struct DownloadInfo {
     data_length: u64,
 }
 
+impl StatusCode {
+    pub fn success(&mut self) -> Result<(), Self> {
+        match self {
+            StatusCode::Ok => Ok(()),
+            _ => Err(*self),
+        }
+    }
+}
+
 impl AtParseLine for DownloadInfo {
     fn from_line(line: &str) -> Result<Self, AtParseErr> {
         let line = line
