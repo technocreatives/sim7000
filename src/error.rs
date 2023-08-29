@@ -1,6 +1,6 @@
 use embassy_time::TimeoutError;
 
-use crate::at_command::SimError;
+use crate::at_command::{httptofs::StatusCode, SimError};
 
 #[derive(Debug)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
@@ -13,6 +13,15 @@ pub enum Error {
 
     /// No default APN was set, and the network did not provide one.
     NoApn,
+    Httptofs(StatusCode),
+    Xtra(Xtra),
+}
+
+#[derive(Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+pub enum Xtra {
+    FileDoesntExist,
+    NotEffective,
 }
 
 impl embedded_io_async::Error for Error {
@@ -24,6 +33,8 @@ impl embedded_io_async::Error for Error {
             Error::Timeout => embedded_io_async::ErrorKind::TimedOut,
             Error::Serial => embedded_io_async::ErrorKind::Other,
             Error::NoApn => embedded_io_async::ErrorKind::Other,
+            Error::Httptofs(_) => embedded_io_async::ErrorKind::Other,
+            Error::Xtra(_) => embedded_io_async::ErrorKind::Other,
         }
     }
 }

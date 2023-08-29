@@ -1,6 +1,8 @@
 use core::fmt::Write;
 use heapless::String;
 
+use crate::{error::Xtra, Error};
+
 use super::{AtParseErr, AtParseLine, AtRequest, AtResponse, GenericOk, ResponseCode};
 
 /// AT+CGNSCOLD=...
@@ -17,11 +19,11 @@ pub enum XtraStatus {
 }
 
 impl XtraStatus {
-    pub fn is_success(&mut self) -> Result<(), Self> {
+    pub fn success(&mut self) -> Result<(), Error> {
         match self {
             XtraStatus::Success => Ok(()),
-            XtraStatus::DoesntExist => Err(XtraStatus::DoesntExist),
-            XtraStatus::NotEffective => Err(XtraStatus::NotEffective),
+            XtraStatus::DoesntExist => Err(Error::Xtra(Xtra::FileDoesntExist)),
+            XtraStatus::NotEffective => Err(Error::Xtra(Xtra::NotEffective)),
         }
     }
 }
@@ -29,9 +31,7 @@ impl XtraStatus {
 impl AtRequest for GnssColdStart {
     type Response = (GenericOk, XtraStatus);
     fn encode(&self) -> String<256> {
-        let mut buf = String::new();
-        write!(buf, "AT+CGNSCOLD\r").unwrap();
-        buf
+        "AT+CGNSCOLD\r".into()
     }
 }
 
