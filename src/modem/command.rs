@@ -1,4 +1,4 @@
-use core::cmp::min;
+use core::{cmp::min, mem};
 use core::future::Future;
 use embassy_sync::{
     blocking_mutex::raw::CriticalSectionRawMutex,
@@ -142,7 +142,22 @@ impl<'a> CommandRunnerGuard<'a> {
         result
     }
 
-    /// Set the timeout of commands
+    /// Send a request to the modem and wait for the modem to respond.
+    ///
+    /// Use the provided timeout value instead of the configured one.
+    pub async fn run_with_timeout<Request, Response>(&mut self, mut timeout: Option<Duration>, command: Request) -> Result<Response, Error>
+
+    where
+        Request: AtRequest<Response = Response>,
+        Response: ExpectResponse,
+    {
+        mem::swap(&mut self.timeout, &mut timeout);
+        let result = self.run(command).await;
+        mem::swap(&mut self.timeout, &mut timeout);
+        result
+    }
+
+    /// Set the timeout of subsequent commands
     ///
     /// Note that the timeout defaults to [AT_DEFAULT_TIMEOUT].
     pub fn with_timeout(self, timeout: Option<Duration>) -> Self {

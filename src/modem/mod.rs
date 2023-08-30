@@ -195,7 +195,7 @@ impl<'c, P: ModemPower> Modem<'c, P> {
             dte_by_dce: FlowControl::Hardware,
         };
 
-        let commands = self.commands.lock().await;
+        let mut commands = self.commands.lock().await;
 
         for _ in 0..5 {
             if let Ok(Ok(_)) = with_timeout(Duration::from_millis(2000), async {
@@ -242,7 +242,9 @@ impl<'c, P: ModemPower> Modem<'c, P> {
             })
             .await?;
 
-        commands.run(ciicr::StartGprs).await?;
+
+        // datasheet specifies 85 seconds max response time
+        commands.run_with_timeout(Some(Duration::from_secs(86)), ciicr::StartGprs).await?;
 
         let (_ip, _) = commands.run(cifsrex::GetLocalIpExt).await?;
 
