@@ -19,6 +19,68 @@ pub(crate) fn collect_array<T: Default + Copy, const N: usize>(
     Some(out)
 }
 
+/// A signal with that keeps track of the last value signaled.
+pub struct StateSignal<M: RawMutex, T> {
+    inner: blocking_mutex::Mutex<M, RefCell<StateSignalInner<T>>>,
+}
+
+struct StateSignalInner<T> {
+    item: T,
+    waker: WakerRegistration,
+}
+
+impl<M: RawMutex, T: Clone> StateSignal<M, T> {
+    pub const fn new(item: T) -> Self {
+        StateSignal {
+            inner: blocking_mutex::Mutex::new(RefCell::new(StateSignalInner {
+                item,
+                waker: WakerRegistration::new(),
+            })),
+        }
+    }
+
+    /// Set the state of the signal and wake anyone calling [compare_wait].
+    pub fn signal(&self, item: T) {
+        self.inner.lock(|s| {
+            let mut s = s.borrow_mut();
+            s.item = item;
+            s.waker.wake();
+        })
+    }
+
+    /// Get the current state.
+    pub fn current(&self) -> T {
+        self.inner.lock(|s| s.borrow().item.clone())
+    }
+
+    /// Wait until someone calls [signal].
+    pub async fn wait(&self) -> T {
+        self.compare_wait(|_| true).await
+    }
+
+    /// Call `f` with the current state, and whenever the state changes, until `f` returns `true`.
+    ///
+    /// Returns the current state at which `f` returned true.
+    pub fn compare_wait<'a>(
+        &'a self,
+        mut f: impl FnMut(&T) -> bool + 'a,
+    ) -> impl Future<Output = T> + 'a {
+        poll_fn(move |cx| {
+            self.inner.lock(|s| {
+                let mut s = s.borrow_mut();
+                let satisfied = f(&s.item);
+                if satisfied {
+                    Poll::Ready(s.item.clone())
+                } else {
+                    let waker_register = &mut s.waker;
+                    waker_register.register(cx.waker());
+                    Poll::Pending
+                }
+            })
+        })
+    }
+}
+
 /// A fixed-capacity channel, backed by a ringbuffer.
 ///
 /// This channel drops old messages if you try to send something while the channel is full.

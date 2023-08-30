@@ -16,7 +16,7 @@ use crate::{
         cnmp, cops, cpsi, csclk, csq, cstt,
         ifc::{self, FlowControl},
         ipr::{self, BaudRate},
-        unsolicited::RegistrationStatus,
+        unsolicited::{NetworkRegistration, RegistrationStatus},
         At, AtRequest, NetworkMode,
     },
     gnss::Gnss,
@@ -48,6 +48,11 @@ pub struct Modem<'c, P> {
 }
 
 const MODEM_POWER_TIMEOUT: Duration = Duration::from_secs(30);
+const NET_REG_DEFAULT: NetworkRegistration = NetworkRegistration {
+    status: RegistrationStatus::NotRegistered,
+    lac: None,
+    ci: None,
+};
 
 impl<'c, P: ModemPower> Modem<'c, P> {
     pub async fn new<I: BuildIo>(
@@ -214,7 +219,8 @@ impl<'c, P: ModemPower> Modem<'c, P> {
             .run(cgreg::ConfigureRegistrationUrc::EnableRegLocation)
             .await?;
 
-        self.wait_for_registration(&commands).await?;
+        self.wait_for_registration().await;
+        log::info!("registered to network");
 
         commands.run(cipmux::EnableMultiIpConnection(true)).await?;
         commands.run(cipshut::ShutConnections).await?;
@@ -242,9 +248,10 @@ impl<'c, P: ModemPower> Modem<'c, P> {
             })
             .await?;
 
-
         // datasheet specifies 85 seconds max response time
-        commands.run_with_timeout(Some(Duration::from_secs(86)), ciicr::StartGprs).await?;
+        commands
+            .run_with_timeout(Some(Duration::from_secs(86)), ciicr::StartGprs)
+            .await?;
 
         let (_ip, _) = commands.run(cifsrex::GetLocalIpExt).await?;
 
@@ -254,6 +261,7 @@ impl<'c, P: ModemPower> Modem<'c, P> {
 
     pub async fn deactivate(&mut self) {
         self.power_signal.broadcast(PowerState::Off);
+        self.context.registration_events.signal(NET_REG_DEFAULT);
         self.context.tcp.disconnect_all().await;
 
         if with_timeout(MODEM_POWER_TIMEOUT, self.power.disable())
@@ -266,25 +274,25 @@ impl<'c, P: ModemPower> Modem<'c, P> {
 
     pub async fn reset(&mut self) {
         self.power_signal.broadcast(PowerState::Off);
+        self.context.registration_events.signal(NET_REG_DEFAULT);
         self.context.tcp.disconnect_all().await;
         self.power.reset().await;
     }
 
-    async fn wait_for_registration(&self, _commands: &CommandRunnerGuard<'_>) -> Result<(), Error> {
-        //commands.run(cgreg::GetRegistrationStatus).await?;
-
+    /// Wait until the modem has registered to a cell tower.
+    pub async fn wait_for_registration(&self) {
+        log::debug!("waiting for cell registration");
         let wait_for_registration = async move {
-            loop {
-                let registration = self.context.registration_events.wait().await;
-                match registration.status {
-                    RegistrationStatus::RegisteredHome | RegistrationStatus::RegisteredRoaming => {
-                        log::info!("registered to network");
-                        break;
-                    }
-                    _ => Timer::after(Duration::from_millis(200)).await,
-                }
-            }
-            Ok(())
+            self.context
+                .registration_events
+                .compare_wait(|r| {
+                    [
+                        RegistrationStatus::RegisteredHome,
+                        RegistrationStatus::RegisteredRoaming,
+                    ]
+                    .contains(&r.status)
+                })
+                .await;
         };
 
         let warn_on_long_wait = async {

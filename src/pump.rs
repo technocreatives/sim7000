@@ -1,4 +1,4 @@
-use crate::{modem::power::PowerSignalListener, BuildIo, PowerState, SplitIo};
+use crate::{modem::power::PowerSignalListener, BuildIo, PowerState, SplitIo, StateSignal};
 use core::{future::Future, str::from_utf8};
 use embassy_futures::select::{select3, Either3};
 use embassy_sync::{
@@ -40,7 +40,8 @@ pub struct RxPump<'context> {
     pub(crate) tcp: &'context TcpContext,
     pub(crate) gnss: &'context Signal<CriticalSectionRawMutex, GnssReport>,
     pub(crate) voltage_warning: &'context Signal<CriticalSectionRawMutex, VoltageWarning>,
-    pub(crate) registration_events: &'context Signal<CriticalSectionRawMutex, NetworkRegistration>,
+    pub(crate) registration_events:
+        &'context StateSignal<CriticalSectionRawMutex, NetworkRegistration>,
 }
 
 impl<'context> Pump for RxPump<'context> {

@@ -1,5 +1,5 @@
-use core::{cmp::min, mem};
 use core::future::Future;
+use core::{cmp::min, mem};
 use embassy_sync::{
     blocking_mutex::raw::CriticalSectionRawMutex,
     channel::{Receiver, Sender},
@@ -145,8 +145,11 @@ impl<'a> CommandRunnerGuard<'a> {
     /// Send a request to the modem and wait for the modem to respond.
     ///
     /// Use the provided timeout value instead of the configured one.
-    pub async fn run_with_timeout<Request, Response>(&mut self, mut timeout: Option<Duration>, command: Request) -> Result<Response, Error>
-
+    pub async fn run_with_timeout<Request, Response>(
+        &mut self,
+        mut timeout: Option<Duration>,
+        command: Request,
+    ) -> Result<Response, Error>
     where
         Request: AtRequest<Response = Response>,
         Response: ExpectResponse,
