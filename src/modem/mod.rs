@@ -264,6 +264,12 @@ impl<'c, P: ModemPower> Modem<'c, P> {
         }
     }
 
+    pub async fn reset(&mut self) {
+        self.power_signal.broadcast(PowerState::Off);
+        self.context.tcp.disconnect_all().await;
+        self.power.reset().await;
+    }
+
     async fn wait_for_registration(&self, _commands: &CommandRunnerGuard<'_>) -> Result<(), Error> {
         //commands.run(cgreg::GetRegistrationStatus).await?;
 
