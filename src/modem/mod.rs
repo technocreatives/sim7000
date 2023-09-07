@@ -260,16 +260,16 @@ impl<'c, P: ModemPower> Modem<'c, P> {
     }
 
     pub async fn deactivate(&mut self) {
-        //self.power_signal.broadcast(PowerState::Off);
+        self.power_signal.broadcast(PowerState::Off);
         self.context.registration_events.signal(NET_REG_DEFAULT);
         self.context.tcp.disconnect_all().await;
 
-        // if with_timeout(MODEM_POWER_TIMEOUT, self.power.disable())
-        //     .await
-        //     .is_err()
-        // {
-        //     log::warn!("timeout while powering off the modem");
-        // }
+        if with_timeout(MODEM_POWER_TIMEOUT, self.power.disable())
+            .await
+            .is_err()
+        {
+            log::warn!("timeout while powering off the modem");
+        }
     }
 
     pub async fn reset(&mut self) {
@@ -277,6 +277,10 @@ impl<'c, P: ModemPower> Modem<'c, P> {
         self.context.registration_events.signal(NET_REG_DEFAULT);
         self.context.tcp.disconnect_all().await;
         self.power.reset().await;
+    }
+
+    pub async fn drop_tcp(&mut self) {
+        self.context.tcp.disconnect_all().await;
     }
 
     /// Wait until the modem has registered to a cell tower.
