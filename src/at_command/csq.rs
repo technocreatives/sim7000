@@ -20,7 +20,7 @@ pub struct SignalQuality {
     /// Signal strength percenage
     pub signal_strength: Option<f32>,
 
-    /// Bit-Error Rate percentage
+    /// Inverse of Bit-Error Rate percentage
     pub signal_quality: Option<f32>,
 }
 
@@ -45,22 +45,22 @@ impl AtParseLine for SignalQuality {
             100.0 * (normalized_rssi as f32 / 63f32)
         });
 
-        let signal_quality = match ber {
-            0 => Some(0.14f32),
-            1 => Some(0.28f32),
-            2 => Some(0.57f32),
-            3 => Some(1.13f32),
-            4 => Some(2.26f32),
-            5 => Some(4.53f32),
-            6 => Some(9.05f32),
-            7 => Some(18.10f32),
+        let bit_error_rate = match ber {
+            0 => Some(0.14),
+            1 => Some(0.28),
+            2 => Some(0.57),
+            3 => Some(1.13),
+            4 => Some(2.26),
+            5 => Some(4.53),
+            6 => Some(9.05),
+            7 => Some(18.10),
             99 => None,
             _ => return Err("Invalid BER value".into()),
         };
 
         Ok(SignalQuality {
             signal_strength,
-            signal_quality,
+            signal_quality: bit_error_rate.map(|ber| 100.0 - ber),
         })
     }
 }
