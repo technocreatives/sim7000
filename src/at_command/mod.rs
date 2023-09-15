@@ -44,6 +44,7 @@ pub mod csq;
 pub mod cstt;
 pub mod httptofs;
 pub mod ifc;
+pub mod gsn;
 pub mod ipr;
 pub mod sapbr;
 
@@ -82,6 +83,7 @@ pub use csclk::SetSlowClock;
 pub use csq::{GetSignalQuality, SignalQuality};
 pub use cstt::StartTask;
 pub use httptofs::DownloadToFileSystem;
+pub use gsn::{Imei, GetImei};
 pub use ifc::{FlowControl, SetFlowControl};
 pub use ipr::{BaudRate, SetBaudRate};
 pub use sapbr::{BearerSettings, CmdType, ConParamType};
@@ -135,6 +137,7 @@ pub enum ResponseCode {
     DownloadInfo(DownloadInfo),
     CopyResponse(CopyResponse),
     XtraStatus(XtraStatus),
+    Imei(Imei),
 }
 
 impl AtParseLine for ResponseCode {
@@ -163,6 +166,9 @@ impl AtParseLine for ResponseCode {
             .or_else(parse(line, ResponseCode::DownloadInfo))
             .or_else(parse(line, ResponseCode::CopyResponse))
             .or_else(parse(line, ResponseCode::XtraStatus))
+            // Imei is weird and may not be unambiguously parsed.
+            // Take care if trying to implement other, similar, response codes.
+            .or_else(parse(line, ResponseCode::Imei))
             .map_err(|_| "Unknown response code".into())
     }
 }
