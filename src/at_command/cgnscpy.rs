@@ -1,4 +1,3 @@
-use core::fmt::Write;
 use heapless::String;
 
 use crate::{error::Xtra, Error};
@@ -13,9 +12,7 @@ pub struct CopyXtraFile;
 impl AtRequest for CopyXtraFile {
     type Response = (CopyResponse, GenericOk);
     fn encode(&self) -> String<256> {
-        let mut buf = String::new();
-        write!(buf, "AT+CGNSCPY\r").unwrap();
-        buf
+        "AT+CGNSCPY\r".into()
     }
 }
 

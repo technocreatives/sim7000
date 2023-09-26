@@ -1,4 +1,3 @@
-use core::fmt::Write;
 use heapless::String;
 
 use crate::{error::Xtra, Error};
