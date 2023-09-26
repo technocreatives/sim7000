@@ -34,9 +34,7 @@ impl AtRequest for SynchronizeNetworkTime {
 impl AtRequest for Execute {
     type Response = (GenericOk, NetworkTime);
     fn encode(&self) -> String<256> {
-        let mut buf = String::new();
-        write!(buf, "AT+CNTP\r").unwrap();
-        buf
+        "AT+CNTP\r".into()
     }
 }
 
@@ -54,9 +52,8 @@ pub enum SyncNtpStatusCode {
 #[derive(Debug)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct NetworkTime {
-    code: SyncNtpStatusCode,
-    #[allow(dead_code)]
-    time: Option<String<32>>,
+    pub code: SyncNtpStatusCode,
+    pub time: Option<String<32>>,
 }
 
 impl AtParseLine for NetworkTime {
