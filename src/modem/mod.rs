@@ -482,6 +482,15 @@ impl<'c, P: ModemPower> Modem<'c, P> {
         self.commands.lock().await.run(command).await
     }
 
+    /// Run a single AT command on the modem with the specified timeout. Use with care.
+    pub async fn run_command_with_timeout<C, Response>(&self, timeout: Option<Duration>, command: C) -> Result<Response, Error>
+    where
+        C: AtRequest<Response = Response>,
+        Response: ExpectResponse,
+    {
+        self.commands.lock().await.run_with_timeout(timeout, command).await
+    }
+
     pub async fn query_system_info(&mut self) -> Result<cpsi::SystemInfo, Error> {
         let (info, _) = self.commands.lock().await.run(cpsi::GetSystemInfo).await?;
         Ok(info)
@@ -493,8 +502,12 @@ impl<'c, P: ModemPower> Modem<'c, P> {
             .map(|(response, _)| response)
     }
 
+    /// Query the current cellular network operator.
+    ///
+    /// This command can take up to 120 seconds to run.
     pub async fn query_operator_info(&mut self) -> Result<cops::OperatorInfo, Error> {
-        self.run_command(cops::GetOperatorInfo)
+        // max response time is 120 seconds
+        self.run_command_with_timeout(Some(Duration::from_secs(121)), cops::GetOperatorInfo)
             .await
             .map(|(response, _)| response)
     }
