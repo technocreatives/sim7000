@@ -221,7 +221,7 @@ impl<'c, P: ModemPower> Modem<'c, P> {
             .run(cgreg::ConfigureRegistrationUrc::EnableRegLocation)
             .await?;
 
-        self.wait_for_registration().await;
+        self.wait_for_registration().await?;
         log::info!("registered to network");
 
         commands.run(cipmux::EnableMultiIpConnection(true)).await?;
@@ -282,7 +282,7 @@ impl<'c, P: ModemPower> Modem<'c, P> {
     }
 
     /// Wait until the modem has registered to a cell tower.
-    pub async fn wait_for_registration(&self) {
+    pub async fn wait_for_registration(&self) -> Result<(), Error> {
         log::debug!("waiting for cell registration");
         let wait_for_registration = async move {
             self.context
@@ -308,8 +308,9 @@ impl<'c, P: ModemPower> Modem<'c, P> {
         };
 
         select_biased! {
-            r = wait_for_registration.fuse() => r,
+            _ = wait_for_registration.fuse() => Ok(()),
             _ = warn_on_long_wait.fuse() => unreachable!(),
+            _ = Timer::after(Duration::from_secs(10 * 60)).fuse() => Err(Error::Timeout),
         }
     }
 
@@ -483,12 +484,20 @@ impl<'c, P: ModemPower> Modem<'c, P> {
     }
 
     /// Run a single AT command on the modem with the specified timeout. Use with care.
-    pub async fn run_command_with_timeout<C, Response>(&self, timeout: Option<Duration>, command: C) -> Result<Response, Error>
+    pub async fn run_command_with_timeout<C, Response>(
+        &self,
+        timeout: Option<Duration>,
+        command: C,
+    ) -> Result<Response, Error>
     where
         C: AtRequest<Response = Response>,
         Response: ExpectResponse,
     {
-        self.commands.lock().await.run_with_timeout(timeout, command).await
+        self.commands
+            .lock()
+            .await
+            .run_with_timeout(timeout, command)
+            .await
     }
 
     pub async fn query_system_info(&mut self) -> Result<cpsi::SystemInfo, Error> {
