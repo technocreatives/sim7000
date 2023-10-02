@@ -4,6 +4,7 @@ pub mod power;
 
 use embassy_time::{with_timeout, Duration, Timer};
 use futures::{select_biased, FutureExt};
+use heapless::String;
 
 use crate::{
     at_command::{
@@ -15,7 +16,7 @@ use crate::{
         cgnspwr, cgnsurc, cgreg, cifsrex, ciicr, cipmux, cipshut,
         cmee::{self, CMEErrorMode},
         cmnb::{self, NbMode},
-        cnmp, cops, cpsi, csclk, csq, cstt,
+        cnmp, cops, cpsi, csclk, csq, cstt, gsn,
         ifc::{self, FlowControl},
         ipr::{self, BaudRate},
         unsolicited::{NetworkRegistration, RegistrationStatus},
@@ -525,6 +526,12 @@ impl<'c, P: ModemPower> Modem<'c, P> {
         self.run_command(ccid::ShowIccid)
             .await
             .map(|(response, _)| response)
+    }
+
+    pub async fn query_imei(&mut self) -> Result<String<16>, Error> {
+        self.run_command(gsn::GetImei)
+            .await
+            .map(|(response, _)| response.imei)
     }
 
     pub async fn query_firmware_version(&mut self) -> Result<cgmr::FwVersion, Error> {
