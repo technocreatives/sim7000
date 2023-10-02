@@ -26,13 +26,11 @@ impl AtParseLine for Imei {
             return Err("Invalid length".into());
         }
 
-        if line.chars().any(|c| !c.is_digit(10)) {
+        if line.chars().any(|c| !c.is_ascii_digit()) {
             return Err("Contains non-digit character".into());
         }
 
-        Ok(Imei {
-            imei: line.into(),
-        })
+        Ok(Imei { imei: line.into() })
     }
 }
 
@@ -50,9 +48,7 @@ mod test {
     use super::*;
     #[test]
     fn parse_cpsi() {
-        let valid_imeis = [
-            "49015420323751",
-        ];
+        let valid_imeis = ["49015420323751"];
 
         for valid in valid_imeis {
             assert!(Imei::from_line(valid).is_ok());
