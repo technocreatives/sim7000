@@ -13,10 +13,10 @@ use crate::{
         cfgri::{self, RiPinMode},
         cgmr, cgnapn,
         cgnsmod::{self, WorkMode},
-        cgnspwr, cgnsurc, cgreg, cifsrex, ciicr, cipmux, cipshut,
+        cgnspwr, cgnsurc, cifsrex, ciicr, cipmux, cipshut,
         cmee::{self, CMEErrorMode},
         cmnb::{self, NbMode},
-        cnmp, cops, cpsi, csclk, csq, cstt, gsn,
+        cnmp, cops, cpsi, creg, csclk, csq, cstt, gsn,
         ifc::{self, FlowControl},
         ipr::{self, BaudRate},
         unsolicited::{NetworkRegistration, RegistrationStatus},
@@ -219,7 +219,7 @@ impl<'c, P: ModemPower> Modem<'c, P> {
             .run(cmee::ConfigureCMEErrors(CMEErrorMode::Numeric))
             .await?;
         commands
-            .run(cgreg::ConfigureRegistrationUrc::EnableRegLocation)
+            .run(creg::ConfigureRegistrationUrc::EnableRegLocation)
             .await?;
 
         self.wait_for_registration().await?;
