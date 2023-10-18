@@ -6,7 +6,6 @@ mod app_pdp;
 mod cbm;
 mod cds;
 mod cfun;
-mod cgreg;
 mod cmt;
 mod cmti;
 mod connection;
@@ -31,12 +30,11 @@ pub use app_pdp::AppNetworkActive;
 pub use cbm::Cbm;
 pub use cds::Cds;
 pub use cfun::CFun;
-pub use cgreg::{NetworkRegistration, RegistrationStatus};
 pub use cmt::Cmt;
 pub use cmti::Cmti;
 pub use connection::{Connection, ConnectionMessage};
 pub use cpin::CPin;
-pub use creg::CReg;
+pub use creg::{NetworkRegistration, RegistrationStatus};
 pub use cring::CRing;
 pub use ctzv::Ctzv;
 pub use cusd::CUsd;
@@ -63,7 +61,6 @@ pub enum Urc {
     Cmt(Cmt),
     Cmti(Cmti),
     CPin(CPin),
-    CReg(CReg),
     CRing(CRing),
     CUsd(CUsd),
     ConnectionMessage(Connection),
@@ -99,7 +96,6 @@ impl AtParseLine for Urc {
             .or_else(parse(line, Urc::Cmt))
             .or_else(parse(line, Urc::Cmti))
             .or_else(parse(line, Urc::CPin))
-            .or_else(parse(line, Urc::CReg))
             .or_else(parse(line, Urc::CRing))
             .or_else(parse(line, Urc::CUsd))
             .or_else(parse(line, Urc::ConnectionMessage))
