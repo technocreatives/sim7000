@@ -1,31 +1,13 @@
-use crate::at_command::{AtParseErr, AtParseLine};
+use super::{network_registration::RegistrationStatus, NetworkRegistration};
+use crate::at_command::AtParseErr;
 
 /// Network registration status
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
-pub struct NetworkRegistration {
-    pub status: RegistrationStatus,
+pub struct CGReg;
 
-    /// Location area code
-    pub lac: Option<u16>,
-
-    /// Cell ID
-    pub ci: Option<u16>,
-}
-
-#[derive(Copy, Clone, Eq, PartialEq, Debug)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
-pub enum RegistrationStatus {
-    NotRegistered,
-    RegisteredHome,
-    Searching,
-    RegistrationDenied,
-    Unknown,
-    RegisteredRoaming,
-}
-
-impl AtParseLine for NetworkRegistration {
-    fn from_line(line: &str) -> Result<Self, AtParseErr> {
+impl CGReg {
+    pub(crate) fn parse(line: &str) -> Result<NetworkRegistration, AtParseErr> {
         let (message, rest) = line.split_once(": ").ok_or("Missing ': '")?;
         if message != "+CGREG" {
             return Err("Missing '+CGREG'".into());
@@ -65,7 +47,7 @@ impl AtParseLine for NetworkRegistration {
             .and_then(|f| u16::from_str_radix(f.trim_matches('"'), 16).ok());
         let ci = fields
             .next()
-            .and_then(|f| u16::from_str_radix(f.trim_matches('"'), 16).ok());
+            .and_then(|f| u32::from_str_radix(f.trim_matches('"'), 16).ok());
 
         Ok(NetworkRegistration { status, lac, ci })
     }

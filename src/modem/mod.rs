@@ -2,18 +2,15 @@ mod command;
 mod context;
 pub mod power;
 
-use embassy_time::{with_timeout, Duration, Timer};
-use futures::{select_biased, FutureExt};
-use heapless::String;
-
 use crate::{
     at_command::{
         ate, cbatchk, ccid,
         cedrxs::{self, AcTType, EDRXSetting, EdrxCycleLength},
+        cereg,
         cfgri::{self, RiPinMode},
         cgmr, cgnapn,
         cgnsmod::{self, WorkMode},
-        cgnspwr, cgnsurc, cifsrex, ciicr, cipmux, cipshut,
+        cgnspwr, cgnsurc, cgreg, cifsrex, ciicr, cipmux, cipshut,
         cmee::{self, CMEErrorMode},
         cmnb::{self, NbMode},
         cnmp, cops, cpsi, creg, csclk, csq, cstt, gsn,
@@ -32,6 +29,9 @@ use crate::{
 };
 pub use command::{CommandRunner, CommandRunnerGuard, RawAtCommand, AT_DEFAULT_TIMEOUT};
 pub use context::*;
+use embassy_time::{with_timeout, Duration, Timer};
+use futures::{select_biased, FutureExt};
+use heapless::String;
 
 use self::{command::ExpectResponse, power::PowerSignalBroadcaster};
 
@@ -218,8 +218,17 @@ impl<'c, P: ModemPower> Modem<'c, P> {
         commands
             .run(cmee::ConfigureCMEErrors(CMEErrorMode::Numeric))
             .await?;
+
+        // CGREG does not work on LTE,
+        // simcom suggested listening to CREG, CGREG and CEREG so that's what we'll do.
         commands
             .run(creg::ConfigureRegistrationUrc::EnableRegLocation)
+            .await?;
+        commands
+            .run(cereg::ConfigureRegistrationUrc::EnableReg)
+            .await?;
+        commands
+            .run(cgreg::ConfigureRegistrationUrc::EnableRegLocation)
             .await?;
 
         self.wait_for_registration().await?;
