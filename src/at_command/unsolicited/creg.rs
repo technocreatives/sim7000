@@ -1,31 +1,13 @@
-use crate::at_command::{AtParseErr, AtParseLine};
+use super::{network_registration::RegistrationStatus, NetworkRegistration};
+use crate::at_command::AtParseErr;
 
 /// Network registration status
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
-pub struct NetworkRegistration {
-    pub status: RegistrationStatus,
+pub struct CReg;
 
-    /// Location area code
-    pub lac: Option<u16>,
-
-    /// Cell ID
-    pub ci: Option<u32>,
-}
-
-#[derive(Copy, Clone, Eq, PartialEq, Debug)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
-pub enum RegistrationStatus {
-    NotRegistered,
-    RegisteredHome,
-    Searching,
-    RegistrationDenied,
-    Unknown,
-    RegisteredRoaming,
-}
-
-impl AtParseLine for NetworkRegistration {
-    fn from_line(line: &str) -> Result<Self, AtParseErr> {
+impl CReg {
+    pub(crate) fn parse(line: &str) -> Result<NetworkRegistration, AtParseErr> {
         let (message, rest) = line.split_once(": ").ok_or("Missing ': '")?;
         if message != "+CREG" {
             return Err("Missing '+CREG'".into());
@@ -78,7 +60,7 @@ mod tests {
     #[test]
     fn parse_lte_urc() {
         let creg_str = "+CREG: 5,\"FFFE\",\"1A8670B\",7";
-        let creg = NetworkRegistration::from_line(creg_str).expect("Parse CREG");
+        let creg = CReg::parse(creg_str).expect("Parse CREG");
 
         let expected = NetworkRegistration {
             status: RegistrationStatus::RegisteredRoaming,
@@ -92,7 +74,7 @@ mod tests {
     #[test]
     fn parse_gsm_urc() {
         let creg_str = "+CREG: 5,\"28A0\",\"2776\",0";
-        let creg = NetworkRegistration::from_line(creg_str).expect("Parse CREG");
+        let creg = CReg::parse(creg_str).expect("Parse CREG");
 
         let expected = NetworkRegistration {
             status: RegistrationStatus::RegisteredRoaming,
