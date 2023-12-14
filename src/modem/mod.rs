@@ -57,6 +57,34 @@ const NET_REG_DEFAULT: NetworkRegistration = NetworkRegistration {
     ci: None,
 };
 
+/// Helper macro that repeatedly attempts to evaluate an expression that returns a result.
+///
+/// Returns the Result yielded by the expression if
+/// - the expression returns `Ok` at any point,
+/// - or the expression returns `Err` $attempts time in a row.
+macro_rules! try_retry {
+    (($label:literal, $attempts:literal, $delay: expr), $e:expr) => {{
+        let mut attempt = 0;
+        loop {
+            let r = $e;
+
+            if r.is_ok() || attempt >= $attempts {
+                break r;
+            }
+
+            attempt += 1;
+            log::warn!(
+                "{} failed, attempt {}/{}, retrying after {:?}",
+                $label,
+                attempt,
+                $attempts,
+                $delay
+            );
+            Timer::after($delay).await;
+        }
+    }};
+}
+
 impl<'c, P: ModemPower> Modem<'c, P> {
     pub async fn new<I: BuildIo>(
         io: I,
@@ -166,12 +194,10 @@ impl<'c, P: ModemPower> Modem<'c, P> {
         commands.run(cbatchk::EnableVBatCheck(true)).await?;
 
         let configure_edrx = cedrxs::ConfigureEDRX::from(config.edrx);
-        for _ in 0..5 {
-            match commands.run(configure_edrx).await {
-                Ok(_) => break,
-                _ => Timer::after(Duration::from_millis(200)).await,
-            }
-        }
+        let _ = try_retry!(
+            ("CEDRX", 5, Duration::from_millis(200)),
+            commands.run(configure_edrx).await
+        );
         commands.run(configure_edrx).await?;
 
         drop(commands);
@@ -219,17 +245,28 @@ impl<'c, P: ModemPower> Modem<'c, P> {
             .run(cmee::ConfigureCMEErrors(CMEErrorMode::Numeric))
             .await?;
 
-        // CGREG does not work on LTE,
-        // simcom suggested listening to CREG, CGREG and CEREG so that's what we'll do.
-        commands
-            .run(creg::ConfigureRegistrationUrc::EnableRegLocation)
-            .await?;
-        commands
-            .run(cereg::ConfigureRegistrationUrc::EnableReg)
-            .await?;
-        commands
-            .run(cgreg::ConfigureRegistrationUrc::EnableRegLocation)
-            .await?;
+        // CREG, CEREG, and CGREG are each necessary based on what network mode we're using
+        // (GSM, LTE, etc). But for simplicity's sake we set up URCs for all of them. This is also
+        // what Simcom recommends. These commands can fail spuriously though, so we run each in a
+        // retry loop up to 5 times.
+        try_retry!(
+            ("CREG", 5, Duration::from_secs(1)),
+            commands
+                .run(creg::ConfigureRegistrationUrc::EnableRegLocation)
+                .await
+        )?;
+        try_retry!(
+            ("CEREG", 5, Duration::from_secs(1)),
+            commands
+                .run(cereg::ConfigureRegistrationUrc::EnableReg)
+                .await
+        )?;
+        try_retry!(
+            ("CGREG", 5, Duration::from_secs(1)),
+            commands
+                .run(cgreg::ConfigureRegistrationUrc::EnableRegLocation)
+                .await
+        )?;
 
         self.wait_for_registration().await?;
         log::info!("registered to network");
@@ -425,10 +462,9 @@ impl<'c, P: ModemPower> Modem<'c, P> {
             .await?;
 
         // sometimes we aren't able to download the file the first couple of times
-        let mut res = Ok(());
-        for _ in 0..5 {
-            res = self
-                .commands
+        try_retry!(
+            ("download xtra", 5, Duration::from_millis(200)),
+            self.commands
                 .lock()
                 .await
                 .run(crate::at_command::httptofs::DownloadToFileSystem {
@@ -442,12 +478,8 @@ impl<'c, P: ModemPower> Modem<'c, P> {
                 .1
                 .status_code
                 .success()
-        }
-
-        match res {
-            Ok(()) => Ok(()),
-            Err(e) => Err(Error::Httptofs(e)),
-        }
+        )
+        .map_err(Error::Httptofs)
     }
 
     /// Enable the use of XTRA file for faster, more accurate GNSS fixes. Similar to assisted gps.
