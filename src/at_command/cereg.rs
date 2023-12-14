@@ -3,7 +3,7 @@ use heapless::String;
 
 use super::{AtRequest, GenericOk};
 
-/// AT+CGREG=...
+/// AT+CEREG=...
 ///
 /// Configure network registration URC
 #[repr(u8)]
