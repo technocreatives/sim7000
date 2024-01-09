@@ -33,7 +33,7 @@ pub use command::{CommandRunner, CommandRunnerGuard, RawAtCommand, AT_DEFAULT_TI
 pub use context::*;
 use embassy_time::{with_timeout, Duration, Timer};
 use futures::{select_biased, FutureExt};
-use heapless::String;
+use heapless::{String, Vec};
 
 use self::{command::ExpectResponse, power::PowerSignalBroadcaster};
 
@@ -51,7 +51,7 @@ pub struct Modem<'c, P> {
     ap_username: &'static str,
     ap_password: &'static str,
     automatic_registration: bool,
-    network_priority: [SystemMode; 3],
+    network_priority: Vec<SystemMode, 3>,
 }
 
 const MODEM_POWER_TIMEOUT: Duration = Duration::from_secs(30);
@@ -113,7 +113,9 @@ impl<'c, P: ModemPower> Modem<'c, P> {
             ap_username: "",
             ap_password: "",
             automatic_registration: false,
-            network_priority: [SystemMode::LteCatM1, SystemMode::Gsm, SystemMode::LteNbIot],
+            network_priority: [SystemMode::LteCatM1, SystemMode::Gsm, SystemMode::LteNbIot]
+                .into_iter()
+                .collect(),
         };
 
         let io_pump = RawIoPump {
@@ -193,13 +195,20 @@ impl<'c, P: ModemPower> Modem<'c, P> {
             .run(cmee::ConfigureCMEErrors(CMEErrorMode::Numeric))
             .await?;
 
-        if config.network_mode == NetworkMode::Automatic {
-            self.automatic_registration = true;
-        } else {
-            commands
-                .run(cnmp::SetNetworkMode(config.network_mode))
-                .await?;
-            commands.run(cmnb::SetNbMode(config.nb_mode)).await?;
+        match config.network_mode {
+            NetworkModeConfig::Automatic { priority } => {
+                if let Some(prio) = priority {
+                    self.network_priority = prio;
+                }
+                self.automatic_registration = true;
+            }
+            NetworkModeConfig::Manual {
+                network_mode,
+                nb_mode,
+            } => {
+                commands.run(cnmp::SetNetworkMode(network_mode)).await?;
+                commands.run(cmnb::SetNbMode(nb_mode)).await?;
+            }
         }
 
         commands.run(cfgri::ConfigureRiPin(RiPinMode::On)).await?;
@@ -282,21 +291,17 @@ impl<'c, P: ModemPower> Modem<'c, P> {
 
         if self.automatic_registration {
             let active_mode = self.automatic_registration(&commands).await?;
-            match active_mode {
-                SystemMode::Gsm => {
-                    self.network_priority =
-                        [SystemMode::Gsm, SystemMode::LteCatM1, SystemMode::LteNbIot]
-                }
-                SystemMode::LteCatM1 => {
-                    self.network_priority =
-                        [SystemMode::LteCatM1, SystemMode::Gsm, SystemMode::LteNbIot]
-                }
-                SystemMode::LteNbIot => {
-                    // We don't really want NbIoT, let's keep the previous priority
-                }
-                _ => {
-                    // Unsupported, let's keep the previous priority
-                }
+
+            // re-order the priority list
+            if let Some(index) = self
+                .network_priority
+                .iter()
+                .position(|mode| *mode == active_mode)
+            {
+                let element = self.network_priority.remove(index);
+                self.network_priority
+                    .insert(0, element)
+                    .expect("we just removed an element");
             }
         } else {
             self.wait_for_registration().await?;
@@ -340,17 +345,13 @@ impl<'c, P: ModemPower> Modem<'c, P> {
         Ok(())
     }
 
-    pub fn reset_network_priority(&mut self) {
-        self.network_priority = [SystemMode::LteCatM1, SystemMode::Gsm, SystemMode::LteNbIot];
-    }
-
     /// Connect to the first available radio access technology (RAT).
     /// If connected using LTE-CatM or GSM, set that RAT as first priority for next registration attempt
     async fn automatic_registration(
         &self,
         commands: &CommandRunnerGuard<'_>,
     ) -> Result<SystemMode, Error> {
-        for mode in self.network_priority {
+        for mode in &self.network_priority {
             match mode {
                 SystemMode::LteCatM1 => {
                     commands.run(cnmp::SetNetworkMode(NetworkMode::Lte)).await?;
@@ -371,14 +372,12 @@ impl<'c, P: ModemPower> Modem<'c, P> {
 
             log::info!("Trying {:?}...", mode);
             match with_timeout(Duration::from_secs(2 * 60), self.wait_for_registration()).await {
-                Ok(res) => {
-                    // this should never happen since wait_for_registration timeout is longer than 2 min
-                    if res.is_err() {
-                        continue;
-                    }
-
+                Ok(Ok(_)) => {
                     log::info!("Registered using {:?}", mode);
-                    return Ok(mode);
+                    return Ok(*mode);
+                }
+                Ok(Err(_)) => {
+                    // this should never happen since wait_for_registration timeout is longer than 2 min
                 }
                 Err(_) => {}
             }
@@ -673,9 +672,24 @@ impl<'c, P: ModemPower> Modem<'c, P> {
 
 /// Configure cellular mobile communication and edrx.
 pub struct RegistrationConfig {
-    pub network_mode: NetworkMode,
-    pub nb_mode: NbMode,
+    pub network_mode: NetworkModeConfig,
     pub edrx: EDRXConfig,
+}
+
+#[derive(PartialEq)]
+pub enum NetworkModeConfig {
+    /// Custom automatic
+    ///
+    /// Goes through the priority list in order, connects to first available RAT.
+    Automatic {
+        /// If none, priority will be: Lte-CatM > GSM > Lte-NbIoT
+        priority: Option<Vec<SystemMode, 3>>,
+    },
+    /// The modules built-in modes
+    Manual {
+        network_mode: NetworkMode,
+        nb_mode: NbMode,
+    },
 }
 
 /// Configuration of Extended Discontinuous Reception mode
@@ -691,8 +705,7 @@ pub enum EDRXConfig {
 impl Default for RegistrationConfig {
     fn default() -> Self {
         RegistrationConfig {
-            network_mode: NetworkMode::Automatic,
-            nb_mode: NbMode::Both,
+            network_mode: NetworkModeConfig::Automatic { priority: None },
             edrx: EDRXConfig::Disabled,
         }
     }
