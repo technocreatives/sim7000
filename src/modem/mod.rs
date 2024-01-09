@@ -51,7 +51,8 @@ pub struct Modem<'c, P> {
     ap_username: &'static str,
     ap_password: &'static str,
     automatic_registration: bool,
-    network_priority: Vec<SystemMode, 3>,
+    user_network_priority: Vec<SystemMode, 3>,
+    current_network_priority: Vec<SystemMode, 3>,
 }
 
 const MODEM_POWER_TIMEOUT: Duration = Duration::from_secs(30);
@@ -113,7 +114,10 @@ impl<'c, P: ModemPower> Modem<'c, P> {
             ap_username: "",
             ap_password: "",
             automatic_registration: false,
-            network_priority: [SystemMode::LteCatM1, SystemMode::Gsm, SystemMode::LteNbIot]
+            user_network_priority: [SystemMode::LteCatM1, SystemMode::Gsm, SystemMode::LteNbIot]
+                .into_iter()
+                .collect(),
+            current_network_priority: [SystemMode::LteCatM1, SystemMode::Gsm, SystemMode::LteNbIot]
                 .into_iter()
                 .collect(),
         };
@@ -198,7 +202,7 @@ impl<'c, P: ModemPower> Modem<'c, P> {
         match config.network_mode {
             NetworkModeConfig::Automatic { priority } => {
                 if let Some(prio) = priority {
-                    self.network_priority = prio;
+                    self.current_network_priority = prio;
                 }
                 self.automatic_registration = true;
             }
@@ -294,12 +298,12 @@ impl<'c, P: ModemPower> Modem<'c, P> {
 
             // re-order the priority list
             if let Some(index) = self
-                .network_priority
+                .current_network_priority
                 .iter()
                 .position(|mode| *mode == active_mode)
             {
-                let element = self.network_priority.remove(index);
-                self.network_priority
+                let element = self.current_network_priority.remove(index);
+                self.current_network_priority
                     .insert(0, element)
                     .expect("we just removed an element");
             }
@@ -345,13 +349,20 @@ impl<'c, P: ModemPower> Modem<'c, P> {
         Ok(())
     }
 
+    /// Resets the network priority to the priority provided when initializing [Modem::init] with [NetworkModeConfig::Automatic]
+    ///
+    /// If not initialized with [NetworkModeConfig::Automatic], this function has no effect
+    pub fn reset_network_priority(&mut self) {
+        self.current_network_priority = self.user_network_priority.clone();
+    }
+
     /// Connect to the first available radio access technology (RAT).
     /// If connected using LTE-CatM or GSM, set that RAT as first priority for next registration attempt
     async fn automatic_registration(
         &self,
         commands: &CommandRunnerGuard<'_>,
     ) -> Result<SystemMode, Error> {
-        for mode in &self.network_priority {
+        for mode in &self.current_network_priority {
             match mode {
                 SystemMode::LteCatM1 => {
                     commands.run(cnmp::SetNetworkMode(NetworkMode::Lte)).await?;
@@ -678,9 +689,9 @@ pub struct RegistrationConfig {
 
 #[derive(PartialEq)]
 pub enum NetworkModeConfig {
-    /// Custom automatic
+    /// Custom automatic, not Simcom automatic.
     ///
-    /// Goes through the priority list in order, connects to first available RAT.
+    /// Goes through the priority list in order. Connects to first available RAT, which will also be set as first priority for next time.
     Automatic {
         /// If none, priority will be: Lte-CatM > GSM > Lte-NbIoT
         priority: Option<Vec<SystemMode, 3>>,
