@@ -16,7 +16,7 @@ impl AtRequest for GetSystemInfo {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum SystemMode {
     NoService,
