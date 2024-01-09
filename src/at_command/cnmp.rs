@@ -4,7 +4,7 @@ use heapless::String;
 use super::{AtRequest, GenericOk};
 
 #[repr(u8)]
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, PartialEq, Debug)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum NetworkMode {
     Automatic = 2,

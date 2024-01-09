@@ -13,7 +13,9 @@ use crate::{
         cgnspwr, cgnsurc, cgreg, cifsrex, ciicr, cipmux, cipshut,
         cmee::{self, CMEErrorMode},
         cmnb::{self, NbMode},
-        cnmp, cops, cpsi, creg, csclk, csq, cstt, gsn,
+        cnmp, cops,
+        cpsi::{self, SystemMode},
+        creg, csclk, csq, cstt, gsn,
         ifc::{self, FlowControl},
         ipr::{self, BaudRate},
         unsolicited::{NetworkRegistration, RegistrationStatus},
@@ -48,6 +50,8 @@ pub struct Modem<'c, P> {
     apn: Option<heapless::String<63>>,
     ap_username: &'static str,
     ap_password: &'static str,
+    automatic_registration: bool,
+    network_priority: [SystemMode; 3],
 }
 
 const MODEM_POWER_TIMEOUT: Duration = Duration::from_secs(30);
@@ -108,6 +112,8 @@ impl<'c, P: ModemPower> Modem<'c, P> {
             apn: None,
             ap_username: "",
             ap_password: "",
+            automatic_registration: false,
+            network_priority: [SystemMode::LteCatM1, SystemMode::Gsm, SystemMode::LteNbIot],
         };
 
         let io_pump = RawIoPump {
@@ -186,10 +192,16 @@ impl<'c, P: ModemPower> Modem<'c, P> {
         commands
             .run(cmee::ConfigureCMEErrors(CMEErrorMode::Numeric))
             .await?;
-        commands
-            .run(cnmp::SetNetworkMode(config.network_mode))
-            .await?;
-        commands.run(cmnb::SetNbMode(config.nb_mode)).await?;
+
+        if config.network_mode == NetworkMode::Automatic {
+            self.automatic_registration = true;
+        } else {
+            commands
+                .run(cnmp::SetNetworkMode(config.network_mode))
+                .await?;
+            commands.run(cmnb::SetNbMode(config.nb_mode)).await?;
+        }
+
         commands.run(cfgri::ConfigureRiPin(RiPinMode::On)).await?;
         commands.run(cbatchk::EnableVBatCheck(true)).await?;
 
@@ -268,7 +280,27 @@ impl<'c, P: ModemPower> Modem<'c, P> {
                 .await
         )?;
 
-        self.wait_for_registration().await?;
+        if self.automatic_registration {
+            let active_mode = self.automatic_registration(&commands).await?;
+            match active_mode {
+                SystemMode::Gsm => {
+                    self.network_priority =
+                        [SystemMode::Gsm, SystemMode::LteCatM1, SystemMode::LteNbIot]
+                }
+                SystemMode::LteCatM1 => {
+                    self.network_priority =
+                        [SystemMode::LteCatM1, SystemMode::Gsm, SystemMode::LteNbIot]
+                }
+                SystemMode::LteNbIot => {
+                    // We don't really want NbIoT, let's keep the previous priority
+                }
+                _ => {
+                    // Unsupported, let's keep the previous priority
+                }
+            }
+        } else {
+            self.wait_for_registration().await?;
+        }
         log::info!("registered to network");
 
         commands.run(cipmux::EnableMultiIpConnection(true)).await?;
@@ -306,6 +338,53 @@ impl<'c, P: ModemPower> Modem<'c, P> {
 
         log::info!("modem successfully activated");
         Ok(())
+    }
+
+    pub fn reset_network_priority(&mut self) {
+        self.network_priority = [SystemMode::LteCatM1, SystemMode::Gsm, SystemMode::LteNbIot];
+    }
+
+    /// Connect to the first available radio access technology (RAT).
+    /// If connected using LTE-CatM or GSM, set that RAT as first priority for next registration attempt
+    async fn automatic_registration(
+        &self,
+        commands: &CommandRunnerGuard<'_>,
+    ) -> Result<SystemMode, Error> {
+        for mode in self.network_priority {
+            match mode {
+                SystemMode::LteCatM1 => {
+                    commands.run(cnmp::SetNetworkMode(NetworkMode::Lte)).await?;
+                    commands.run(cmnb::SetNbMode(NbMode::CatM)).await?;
+                }
+                SystemMode::Gsm => {
+                    commands.run(cnmp::SetNetworkMode(NetworkMode::Gsm)).await?;
+                }
+                SystemMode::LteNbIot => {
+                    commands.run(cnmp::SetNetworkMode(NetworkMode::Lte)).await?;
+                    commands.run(cmnb::SetNbMode(NbMode::NbIot)).await?;
+                }
+                _ => {
+                    log::error!("Unsupported network mode: {:?}", mode);
+                    return Err(Error::Timeout);
+                }
+            }
+
+            log::info!("Trying {:?}...", mode);
+            match with_timeout(Duration::from_secs(2 * 60), self.wait_for_registration()).await {
+                Ok(res) => {
+                    // this should never happen since wait_for_registration timeout is longer than 2 min
+                    if res.is_err() {
+                        continue;
+                    }
+
+                    log::info!("Registered using {:?}", mode);
+                    return Ok(mode);
+                }
+                Err(_) => {}
+            }
+        }
+
+        return Err(Error::Timeout);
     }
 
     pub async fn deactivate(&mut self) {
