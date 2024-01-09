@@ -14,7 +14,7 @@ use crate::{
         cmee::{self, CMEErrorMode},
         cmnb::{self, NbMode},
         cnmp, cops,
-        cpsi::{self, SystemMode},
+        cpsi::{self},
         creg, csclk, csq, cstt, gsn,
         ifc::{self, FlowControl},
         ipr::{self, BaudRate},
@@ -51,8 +51,8 @@ pub struct Modem<'c, P> {
     ap_username: &'static str,
     ap_password: &'static str,
     automatic_registration: bool,
-    user_network_priority: Vec<SystemMode, 3>,
-    current_network_priority: Vec<SystemMode, 3>,
+    user_network_priority: Vec<RadioAccessTechnology, 3>,
+    current_network_priority: Vec<RadioAccessTechnology, 3>,
 }
 
 const MODEM_POWER_TIMEOUT: Duration = Duration::from_secs(30);
@@ -114,12 +114,20 @@ impl<'c, P: ModemPower> Modem<'c, P> {
             ap_username: "",
             ap_password: "",
             automatic_registration: false,
-            user_network_priority: [SystemMode::LteCatM1, SystemMode::Gsm, SystemMode::LteNbIot]
-                .into_iter()
-                .collect(),
-            current_network_priority: [SystemMode::LteCatM1, SystemMode::Gsm, SystemMode::LteNbIot]
-                .into_iter()
-                .collect(),
+            user_network_priority: [
+                RadioAccessTechnology::LteCatM1,
+                RadioAccessTechnology::Gsm,
+                RadioAccessTechnology::LteNbIot,
+            ]
+            .into_iter()
+            .collect(),
+            current_network_priority: [
+                RadioAccessTechnology::LteCatM1,
+                RadioAccessTechnology::Gsm,
+                RadioAccessTechnology::LteNbIot,
+            ]
+            .into_iter()
+            .collect(),
         };
 
         let io_pump = RawIoPump {
@@ -361,23 +369,19 @@ impl<'c, P: ModemPower> Modem<'c, P> {
     async fn automatic_registration(
         &self,
         commands: &CommandRunnerGuard<'_>,
-    ) -> Result<SystemMode, Error> {
+    ) -> Result<RadioAccessTechnology, Error> {
         for mode in &self.current_network_priority {
             match mode {
-                SystemMode::LteCatM1 => {
+                RadioAccessTechnology::LteCatM1 => {
                     commands.run(cnmp::SetNetworkMode(NetworkMode::Lte)).await?;
                     commands.run(cmnb::SetNbMode(NbMode::CatM)).await?;
                 }
-                SystemMode::Gsm => {
+                RadioAccessTechnology::Gsm => {
                     commands.run(cnmp::SetNetworkMode(NetworkMode::Gsm)).await?;
                 }
-                SystemMode::LteNbIot => {
+                RadioAccessTechnology::LteNbIot => {
                     commands.run(cnmp::SetNetworkMode(NetworkMode::Lte)).await?;
                     commands.run(cmnb::SetNbMode(NbMode::NbIot)).await?;
-                }
-                _ => {
-                    log::error!("Unsupported network mode: {:?}", mode);
-                    return Err(Error::Timeout);
                 }
             }
 
@@ -687,6 +691,13 @@ pub struct RegistrationConfig {
     pub edrx: EDRXConfig,
 }
 
+#[derive(PartialEq, Debug, Clone, Copy)]
+pub enum RadioAccessTechnology {
+    LteCatM1,
+    LteNbIot,
+    Gsm,
+}
+
 #[derive(PartialEq)]
 pub enum NetworkModeConfig {
     /// Custom automatic, not Simcom automatic.
@@ -694,7 +705,7 @@ pub enum NetworkModeConfig {
     /// Goes through the priority list in order. Connects to first available RAT, which will also be set as first priority for next time.
     Automatic {
         /// If none, priority will be: Lte-CatM > GSM > Lte-NbIoT
-        priority: Option<Vec<SystemMode, 3>>,
+        priority: Option<Vec<RadioAccessTechnology, 3>>,
     },
     /// The modules built-in modes
     Manual {
