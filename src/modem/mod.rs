@@ -696,6 +696,7 @@ pub struct RegistrationConfig {
 }
 
 #[derive(PartialEq, Debug, Clone, Copy)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum RadioAccessTechnology {
     LteCatM1,
     LteNbIot,
