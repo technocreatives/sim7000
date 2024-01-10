@@ -53,7 +53,7 @@ pub struct Modem<'c, P> {
     automatic_registration: bool,
     user_network_priority: Vec<RadioAccessTechnology, 3>,
     current_network_priority: Vec<RadioAccessTechnology, 3>,
-    // Time given to each RAT before trying the next
+    /// Time given to each RAT before trying the next
     auto_reg_timeout: Duration,
 }
 
