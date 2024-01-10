@@ -53,6 +53,8 @@ pub struct Modem<'c, P> {
     automatic_registration: bool,
     user_network_priority: Vec<RadioAccessTechnology, 3>,
     current_network_priority: Vec<RadioAccessTechnology, 3>,
+    // Time given to each RAT before trying the next
+    auto_reg_timeout: Duration,
 }
 
 const MODEM_POWER_TIMEOUT: Duration = Duration::from_secs(30);
@@ -128,6 +130,7 @@ impl<'c, P: ModemPower> Modem<'c, P> {
             ]
             .into_iter()
             .collect(),
+            auto_reg_timeout: Duration::from_secs(2 * 60),
         };
 
         let io_pump = RawIoPump {
@@ -208,11 +211,12 @@ impl<'c, P: ModemPower> Modem<'c, P> {
             .await?;
 
         match config.network_mode {
-            NetworkModeConfig::Automatic { priority } => {
+            NetworkModeConfig::Automatic { priority, timeout } => {
                 if let Some(prio) = priority {
                     self.current_network_priority = prio;
                 }
                 self.automatic_registration = true;
+                self.auto_reg_timeout = timeout;
             }
             NetworkModeConfig::Manual {
                 network_mode,
@@ -386,7 +390,7 @@ impl<'c, P: ModemPower> Modem<'c, P> {
             }
 
             log::info!("Trying {:?}...", mode);
-            match with_timeout(Duration::from_secs(2 * 60), self.wait_for_registration()).await {
+            match with_timeout(self.auto_reg_timeout, self.wait_for_registration()).await {
                 Ok(Ok(_)) => {
                     log::info!("Registered using {:?}", mode);
                     return Ok(*mode);
@@ -706,6 +710,8 @@ pub enum NetworkModeConfig {
     Automatic {
         /// If none, priority will be: Lte-CatM > GSM > Lte-NbIoT
         priority: Option<Vec<RadioAccessTechnology, 3>>,
+        /// How much time is given for each radio access technology before trying the next
+        timeout: Duration,
     },
     /// The modules built-in modes
     Manual {
@@ -727,7 +733,10 @@ pub enum EDRXConfig {
 impl Default for RegistrationConfig {
     fn default() -> Self {
         RegistrationConfig {
-            network_mode: NetworkModeConfig::Automatic { priority: None },
+            network_mode: NetworkModeConfig::Automatic {
+                priority: None,
+                timeout: Duration::from_secs(2 * 60),
+            },
             edrx: EDRXConfig::Disabled,
         }
     }
