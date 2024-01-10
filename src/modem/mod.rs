@@ -370,6 +370,8 @@ impl<'c, P: ModemPower> Modem<'c, P> {
 
     /// Connect to the first available radio access technology (RAT).
     /// If connected using LTE-CatM or GSM, set that RAT as first priority for next registration attempt
+    ///
+    /// Returns which technology ends up being used, or a timeout error
     async fn automatic_registration(
         &self,
         commands: &CommandRunnerGuard<'_>,
