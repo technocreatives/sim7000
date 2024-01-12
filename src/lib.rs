@@ -5,9 +5,6 @@
 #![allow(clippy::single_component_path_imports)]
 // large enum variants are unavoidable in no_std, since we can't box things
 #![allow(clippy::large_enum_variant, clippy::result_large_err)]
-// embassy uses the new unstable async fns in traits feature
-#![allow(incomplete_features)]
-#![feature(async_fn_in_trait, impl_trait_projections)]
 
 // TODO: at_command should probably be moved to its own crate
 pub mod at_command;
@@ -44,13 +41,13 @@ pub trait SerialError {
 }
 
 pub trait BuildIo {
-    type IO<'d>: SplitIo
+    type IO<'d>: SplitIo<'d>
     where
         Self: 'd;
     fn build(&mut self) -> Self::IO<'_>;
 }
 
-pub trait SplitIo {
+pub trait SplitIo<'a> {
     type Reader<'u>: Read
     where
         Self: 'u;
@@ -58,30 +55,15 @@ pub trait SplitIo {
     where
         Self: 'u;
 
-    fn split(&mut self) -> (Self::Reader<'_>, Self::Writer<'_>);
+    fn split(self) -> (Self::Reader<'a>, Self::Writer<'a>);
 }
 
 pub trait ModemPower {
-    type EnableFuture<'a>: Future<Output = ()> + 'a
-    where
-        Self: 'a;
-    type DisableFuture<'a>: Future<Output = ()> + 'a
-    where
-        Self: 'a;
-    type SleepFuture<'a>: Future<Output = ()> + 'a
-    where
-        Self: 'a;
-    type WakeFuture<'a>: Future<Output = ()> + 'a
-    where
-        Self: 'a;
-    type ResetFuture<'a>: Future<Output = ()> + 'a
-    where
-        Self: 'a;
-    fn enable(&mut self) -> Self::EnableFuture<'_>;
-    fn disable(&mut self) -> Self::DisableFuture<'_>;
-    fn sleep(&mut self) -> Self::SleepFuture<'_>;
-    fn wake(&mut self) -> Self::WakeFuture<'_>;
-    fn reset(&mut self) -> Self::ResetFuture<'_>;
+    fn enable(&mut self) -> impl Future<Output = ()>;
+    fn disable(&mut self) -> impl Future<Output = ()>;
+    fn sleep(&mut self) -> impl Future<Output = ()>;
+    fn wake(&mut self) -> impl Future<Output = ()>;
+    fn reset(&mut self) -> impl Future<Output = ()>;
     fn state(&mut self) -> PowerState;
 }
 

@@ -4,7 +4,7 @@ use embassy_futures::select::{select3, Either3};
 use embassy_sync::{
     blocking_mutex::raw::CriticalSectionRawMutex,
     channel::{Receiver, Sender},
-    pipe::{Reader, Writer},
+    pipe::Pipe,
     signal::Signal,
 };
 use embassy_time::{with_timeout, Duration};
@@ -83,13 +83,7 @@ impl<'context> Pump for RxPump<'context> {
                                 buf.len(),
                                 connection
                             );
-                            self.tcp.slots[connection]
-                                .peek()
-                                .rx
-                                .writer()
-                                .write_all(&buf)
-                                .await
-                                .ok(/* infallible */);
+                            self.tcp.slots[connection].peek().rx.write_all(&buf).await;
                             log::debug!("Bytes sent to tcp connection {}", connection);
                         }
                         log::debug!("Done sending to tcp connection {}", connection);
@@ -137,7 +131,8 @@ impl<'context> Pump for RxPump<'context> {
 }
 
 pub struct TxPump<'context> {
-    pub(crate) writer: Writer<'context, CriticalSectionRawMutex, 2048>,
+    //pub(crate) writer: Writer<'context, CriticalSectionRawMutex, 2048>,
+    pub(crate) writer: &'context Pipe<CriticalSectionRawMutex, 2048>,
     pub(crate) commands: Receiver<'context, CriticalSectionRawMutex, RawAtCommand, 4>,
 }
 
@@ -149,7 +144,7 @@ impl<'context> Pump for TxPump<'context> {
 
     fn pump(&mut self) -> Self::Fut<'_> {
         async {
-            let command = self.commands.recv().await;
+            let command = self.commands.receive().await;
             match &command {
                 RawAtCommand::Text(text) => log::debug!("Write to modem: {:?}", text.as_str()),
                 RawAtCommand::Binary(bytes) => log::debug!("Write {} bytes to modem", bytes.len()),
@@ -182,7 +177,7 @@ impl<'context> Pump for DropPump<'context> {
                 power_state = self.power_signal.listen().fuse() => {
                     self.power_state = power_state;
                 }
-                drop_message = self.context.drop_channel.recv().fuse() => {
+                drop_message = self.context.drop_channel.receive().fuse() => {
                     if self.power_state == PowerState::On {
                         // run drop command, abort if power state changes
                         let result = select_biased! {
@@ -215,16 +210,18 @@ impl<'context> Pump for DropPump<'context> {
 pub struct RawIoPump<'context, RW> {
     pub(crate) io: RW,
     /// sends data to the rx pump
-    pub(crate) rx: Writer<'context, CriticalSectionRawMutex, 2048>,
+    //pub(crate) rx: Writer<'context, CriticalSectionRawMutex, 2048>,
+    pub(crate) rx: &'context Pipe<CriticalSectionRawMutex, 2048>,
     /// reads data from the tx pump
-    pub(crate) tx: Reader<'context, CriticalSectionRawMutex, 2048>,
+    //pub(crate) tx: Reader<'context, CriticalSectionRawMutex, 2048>,
+    pub(crate) tx: &'context Pipe<CriticalSectionRawMutex, 2048>,
     pub(crate) power_signal: PowerSignalListener<'context>,
     pub(crate) power_state: PowerState,
 }
 
 impl<'context, RW: 'static + BuildIo> RawIoPump<'context, RW> {
     pub async fn high_power_pump(&mut self) -> Result<(), Error> {
-        let mut io = self.io.build();
+        let io = self.io.build();
         let (mut reader, mut writer) = io.split();
 
         loop {
@@ -253,7 +250,8 @@ impl<'context, RW: 'static + BuildIo> RawIoPump<'context, RW> {
                         Err(_) => log::trace!("READ INVALID {:?}", &rx_buf[..bytes]),
                     }
 
-                    self.rx.write_all(&rx_buf[..bytes]).await.ok(/* infallible */);
+                    self.rx.write_all(&rx_buf[..bytes]).await;
+                    // TODO: this flush is probably not needed
                     self.rx.flush().await.ok(/* infallible */);
                 }
                 Either3::Third(result) => {
