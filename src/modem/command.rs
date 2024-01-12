@@ -96,7 +96,7 @@ impl<'a> CommandRunnerGuard<'a> {
     pub async fn expect_response<T: AtResponse>(&self) -> Result<T, Error> {
         self.timeout(async {
             loop {
-                let response = self.runner.responses.recv().await;
+                let response = self.runner.responses.receive().await;
 
                 match T::from_generic(response) {
                     Ok(response) => return Ok(response),
