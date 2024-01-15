@@ -131,7 +131,6 @@ impl<'context> Pump for RxPump<'context> {
 }
 
 pub struct TxPump<'context> {
-    //pub(crate) writer: Writer<'context, CriticalSectionRawMutex, 2048>,
     pub(crate) writer: &'context Pipe<CriticalSectionRawMutex, 2048>,
     pub(crate) commands: Receiver<'context, CriticalSectionRawMutex, RawAtCommand, 4>,
 }
@@ -210,10 +209,8 @@ impl<'context> Pump for DropPump<'context> {
 pub struct RawIoPump<'context, RW> {
     pub(crate) io: RW,
     /// sends data to the rx pump
-    //pub(crate) rx: Writer<'context, CriticalSectionRawMutex, 2048>,
     pub(crate) rx: &'context Pipe<CriticalSectionRawMutex, 2048>,
     /// reads data from the tx pump
-    //pub(crate) tx: Reader<'context, CriticalSectionRawMutex, 2048>,
     pub(crate) tx: &'context Pipe<CriticalSectionRawMutex, 2048>,
     pub(crate) power_signal: PowerSignalListener<'context>,
     pub(crate) power_state: PowerState,
