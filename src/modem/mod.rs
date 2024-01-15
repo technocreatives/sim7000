@@ -166,20 +166,10 @@ impl<'c, P: ModemPower> Modem<'c, P> {
 
     pub async fn init(&mut self, config: RegistrationConfig) -> Result<(), Error> {
         log::info!("initializing modem");
-        log::warn!("blahahahah");
-
-        log::error!("modem log-level: error");
-        log::warn!("modem log-level: warn");
-        log::info!("modem log-level: info");
-        log::debug!("modem log-level: debug");
-        log::trace!("modem log-level: trace");
 
         self.deactivate().await;
-        log::warn!("1");
         with_timeout(MODEM_POWER_TIMEOUT, self.power.enable()).await?;
-        log::warn!("2");
         self.power_signal.broadcast(PowerState::On);
-        log::warn!("3");
 
         let commands = self.commands.lock().await;
 
@@ -187,8 +177,6 @@ impl<'c, P: ModemPower> Modem<'c, P> {
             dce_by_dte: FlowControl::Hardware,
             dte_by_dce: FlowControl::Hardware,
         };
-
-        log::warn!("4");
 
         // Turn on hardware flow control, the modem does not save this state on reboot.
         // We need to set it as fast as possible to avoid dropping bytes.
@@ -201,7 +189,6 @@ impl<'c, P: ModemPower> Modem<'c, P> {
                 break;
             }
         }
-        log::warn!("5");
 
         // Modem has been known to get stuck in an unresponsive state until we jiggle it by
         // enabling echo. This is fine.
