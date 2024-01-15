@@ -11,7 +11,6 @@ pub struct ModemReader<'context> {
 }
 
 impl<'context> ModemReader<'context> {
-    //pub fn new(read: Reader<'context, CriticalSectionRawMutex, 2048>) -> ModemReader<'context> {
     pub fn new(read: &'context Pipe<CriticalSectionRawMutex, 2048>) -> ModemReader<'context> {
         ModemReader {
             read,
