@@ -218,8 +218,8 @@ pub struct RawIoPump<'context, RW> {
 
 impl<'context, RW: 'static + BuildIo> RawIoPump<'context, RW> {
     pub async fn high_power_pump(&mut self) -> Result<(), Error> {
-        let io = self.io.build();
-        let (mut reader, mut writer) = io.split();
+        let mut io = Some(self.io.build());
+        let (mut reader, mut writer) = RW::IO::split(&mut io);
 
         loop {
             let mut tx_buf = [0u8; 256];
