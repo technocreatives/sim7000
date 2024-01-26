@@ -40,14 +40,22 @@ pub trait SerialError {
     type Error: core::fmt::Debug;
 }
 
+/// This trait is for building a `BuildIo::IO` that implements [SplitIo].
+///
+/// The purpose of the trait is to let the use of this library to plug in UART driver types from
+/// whatever HAL they're using. The trait provides the ability for the `RawIoPump` to
+/// construct/destruct (enable/disable) the UART IO.
 pub trait BuildIo {
-    type IO<'d>: SplitIo<'d>
+    type IO<'d>: SplitIo
     where
         Self: 'd;
+
+    /// Construct a `BuildIo::IO` that implements [SplitIo].
     fn build(&mut self) -> Self::IO<'_>;
 }
 
-pub trait SplitIo<'a> {
+/// Split self into a reader and a writer. See documentation on [SplitIo::split].
+pub trait SplitIo: Sized {
     type Reader<'u>: Read
     where
         Self: 'u;
@@ -55,15 +63,32 @@ pub trait SplitIo<'a> {
     where
         Self: 'u;
 
-    fn split(self) -> (Self::Reader<'a>, Self::Writer<'a>);
+    /// Split self into a reader and a writer.
+    ///
+    /// **NOTE**: This method **must not** be called with None. Implementations are allowed to panic
+    /// on None. This method takes a `&mut Option<Self>` so that implementations can choose to
+    /// borrow `Self`, or to take ownership of it. This is to maintain compatibility with as many
+    /// HALs as possible.
+    fn split(this: &mut Option<Self>) -> (Self::Reader<'_>, Self::Writer<'_>);
 }
 
 pub trait ModemPower {
+    /// Power on the modem, e.g. by pulling on the modem power key pin.
     fn enable(&mut self) -> impl Future<Output = ()>;
+
+    /// Power off the modem, e.g. by pulling on the modem power key pin.
     fn disable(&mut self) -> impl Future<Output = ()>;
+
+    /// Put the modem to sleep, e.g. by pulling on the modem DTR pin.
     fn sleep(&mut self) -> impl Future<Output = ()>;
+
+    /// Wake the modem from sleep, e.g. by pulling on the modem DTR pin.
     fn wake(&mut self) -> impl Future<Output = ()>;
+
+    /// Reset the modem, e.g. by pulling on the modem reset pin.
     fn reset(&mut self) -> impl Future<Output = ()>;
+
+    /// Get the curren power state of the modem, e.g. by looking at the modem status pin.
     fn state(&mut self) -> PowerState;
 }
 
