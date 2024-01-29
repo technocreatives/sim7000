@@ -6,10 +6,7 @@ use core::str::{from_utf8, Utf8Error};
 use embassy_executor::{SpawnError, Spawner};
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::channel::Channel;
-use embedded_io::{
-    asynch::{Read, Write},
-    blocking::ReadExactError,
-};
+use embedded_io_async::{Read, ReadExactError, Write};
 use heapless::Vec;
 use sim7000_async::{
     gnss::Gnss,
@@ -83,7 +80,7 @@ pub async fn ping_tcpbin(
     let stream = modem.connect_tcp("tcpbin.com", 4242).await?;
 
     spawner.spawn(task(stream))?;
-    Ok(TASK_CHANNEL.recv())
+    Ok(TASK_CHANNEL.receive())
 }
 
 pub async fn get_quote_of_the_day(
@@ -129,7 +126,7 @@ pub async fn get_quote_of_the_day(
     let stream = modem.connect_tcp("djxmmx.net", 17).await?;
 
     spawner.spawn(task(stream))?;
-    return Ok(TASK_CHANNEL.recv());
+    return Ok(TASK_CHANNEL.receive());
 }
 
 impl From<SpawnError> for Error {

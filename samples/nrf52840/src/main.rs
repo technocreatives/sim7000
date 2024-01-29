@@ -1,10 +1,8 @@
 #![no_std]
 #![no_main]
-#![feature(type_alias_impl_trait)]
 
 mod example;
 
-use core::future::Future;
 use embassy_executor::Spawner;
 use embassy_nrf::{
     bind_interrupts,
@@ -17,9 +15,7 @@ use embassy_time::{Duration, Timer};
 use sim7000_async::{spawn_modem, BuildIo, ModemPower, PowerState, SplitIo};
 
 use defmt_rtt as _; // linker shenanigans
-
-//#[cfg(debug_assertions)]
-extern crate panic_rtt_target;
+use panic_rtt_target as _;
 
 type Modem = sim7000_async::modem::Modem<'static, ModemPowerPins>;
 
@@ -158,7 +154,7 @@ impl BuildIo for UarteComponents {
     where
     Self: 'd;
 
-    fn build<'d>(&'d mut self) -> Self::IO<'d> {
+    fn build(&mut self) -> Self::IO<'_> {
         AppUarte(BufferedUarte::new_with_rtscts(
             &mut self.uarte,
             &mut self.timer,
@@ -194,8 +190,8 @@ impl<'d> SplitIo for AppUarte<'d> {
     where
     Self: 'u;
 
-    fn split<'u>(&'u mut self) -> (Self::Reader<'u>, Self::Writer<'u>) {
-        self.0.split()
+    fn split(this: &mut Option<Self>) -> (Self::Reader<'_>, Self::Writer<'_>) {
+        this.as_mut().unwrap().0.split()
     }
 }
 
@@ -230,73 +226,47 @@ impl ModemPowerPins {
 }
 
 impl ModemPower for ModemPowerPins {
-    type EnableFuture<'a> = impl Future<Output = ()> + 'a
-    where
-        Self: 'a;
-    type DisableFuture<'a> = impl Future<Output = ()> + 'a
-    where
-        Self: 'a;
-    type SleepFuture<'a> = impl Future<Output = ()> + 'a
-    where
-        Self: 'a;
-    type WakeFuture<'a> = impl Future<Output = ()> + 'a
-    where
-        Self: 'a;
-    type ResetFuture<'a> = impl Future<Output = ()> + 'a
-    where
-        Self: 'a;
-
-    fn enable(&mut self) -> Self::EnableFuture<'_> {
-        async {
-            defmt::info!("enabling modem");
-            //poor datasheet gives only min, not max timeout
-            if self.is_enabled() {
-                defmt::info!("modem was enabled already");
-                return;
-            }
-            self.press_power_key(1100).await;
-            while self.status.is_low() {
-                Timer::after(Duration::from_millis(100)).await;
-            }
-            defmt::info!("modem enabled");
+    async fn enable(&mut self) {
+        defmt::info!("enabling modem");
+        //poor datasheet gives only min, not max timeout
+        if self.is_enabled() {
+            defmt::info!("modem was enabled already");
+            return;
         }
+        self.press_power_key(1100).await;
+        while self.status.is_low() {
+            Timer::after(Duration::from_millis(100)).await;
+        }
+        defmt::info!("modem enabled");
     }
 
-    fn disable(&mut self) -> Self::DisableFuture<'_> {
-        async {
-            defmt::info!("disabling modem");
-            //poor datasheet gives only min, not max timeout
-            if !self.is_enabled() {
-                defmt::info!("modem was disabled already");
-                return;
-            }
-            self.press_power_key(1300).await;
-            while self.status.is_high() {
-                Timer::after(Duration::from_millis(100)).await;
-            }
-            defmt::info!("modem disabled");
+    async fn disable(&mut self) {
+        defmt::info!("disabling modem");
+        //poor datasheet gives only min, not max timeout
+        if !self.is_enabled() {
+            defmt::info!("modem was disabled already");
+            return;
         }
+        self.press_power_key(1300).await;
+        while self.status.is_high() {
+            Timer::after(Duration::from_millis(100)).await;
+        }
+        defmt::info!("modem disabled");
     }
 
-    fn sleep(&mut self) -> Self::SleepFuture<'_> {
-        async {
-            self.dtr.set_high();
-        }
+    async fn sleep(&mut self) {
+        self.dtr.set_high();
     }
 
-    fn wake(&mut self) -> Self::WakeFuture<'_> {
-        async {
-            self.dtr.set_low();
-        }
+    async fn wake(&mut self) {
+        self.dtr.set_low();
     }
 
-    fn reset(&mut self) -> Self::ResetFuture<'_> {
-        async {
-            self.reset.set_high();
-            // Reset pin needs to be held low for 252ms. Wait for 300ms to ensure it works.
-            Timer::after(Duration::from_millis(300)).await;
-            self.reset.set_low();
-        }
+    async fn reset(&mut self) {
+        self.reset.set_high();
+        // Reset pin needs to be held low for 252ms. Wait for 300ms to ensure it works.
+        Timer::after(Duration::from_millis(300)).await;
+        self.reset.set_low();
     }
 
     fn state(&mut self) -> sim7000_async::PowerState {
