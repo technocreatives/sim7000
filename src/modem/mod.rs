@@ -405,7 +405,7 @@ impl<'c, P: ModemPower> Modem<'c, P> {
             }
         }
 
-        return Err(Error::Timeout);
+        Err(Error::Timeout)
     }
 
     pub async fn deactivate(&mut self) {
