@@ -173,33 +173,19 @@ impl<'a> CommandRunnerGuard<'a> {
 /// In order to support AtRequest::Response being a tuple of arbitrary size, we
 /// implement the ExpectResponse trait for tuples with as many member as we need.
 pub trait ExpectResponse: Sized {
-    type Fut<'a>: Future<Output = Result<Self, Error>> + 'a
-    where
-        Self: 'a;
-
-    fn expect<'a>(runner: &'a CommandRunnerGuard<'a>) -> Self::Fut<'a>;
+    fn expect<'a>(runner: &'a CommandRunnerGuard<'a>) -> impl Future<Output = Result<Self, Error>>;
 }
 
 impl<T: AtResponse> ExpectResponse for T {
-    type Fut<'a> = impl Future<Output = Result<Self, Error>> + 'a
-    where
-        Self: 'a;
-
-    fn expect<'a>(runner: &'a CommandRunnerGuard<'a>) -> Self::Fut<'a> {
-        runner.expect_response()
+    async fn expect<'a>(runner: &'a CommandRunnerGuard<'a>) -> Result<Self, Error> {
+        runner.expect_response().await
     }
 }
 
 impl<T: AtResponse, Y: AtResponse> ExpectResponse for (T, Y) {
-    type Fut<'a> = impl Future<Output = Result<Self, Error>> + 'a
-    where
-        Self: 'a;
-
-    fn expect<'a>(runner: &'a CommandRunnerGuard<'a>) -> Self::Fut<'a> {
-        async {
-            let r1 = runner.expect_response().await?;
-            let r2 = runner.expect_response().await?;
-            Ok((r1, r2))
-        }
+    async fn expect<'a>(runner: &'a CommandRunnerGuard<'a>) -> Result<Self, Error> {
+        let r1 = runner.expect_response().await?;
+        let r2 = runner.expect_response().await?;
+        Ok((r1, r2))
     }
 }
