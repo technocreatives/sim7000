@@ -9,6 +9,7 @@ description = "Drivers for the SIM7000 series of chips"
 license = "Apache-2.0 OR MIT"
 repository = "https://github.com/technocreatives/sim7000"
 edition = "2021"
+rust-version = "1.75"
 
 [dependencies]
 critical-section = "0.2.7"

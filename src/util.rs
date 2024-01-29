@@ -39,7 +39,7 @@ impl<M: RawMutex, T: Clone> StateSignal<M, T> {
         }
     }
 
-    /// Set the state of the signal and wake anyone calling [compare_wait].
+    /// Set the state of the signal and wake anyone calling [StateSignal::compare_wait].
     pub fn signal(&self, item: T) {
         self.inner.lock(|s| {
             let mut s = s.borrow_mut();
@@ -53,7 +53,7 @@ impl<M: RawMutex, T: Clone> StateSignal<M, T> {
         self.inner.lock(|s| s.borrow().item.clone())
     }
 
-    /// Wait until someone calls [signal].
+    /// Wait until someone calls [StateSignal::signal].
     pub async fn wait(&self) -> T {
         self.compare_wait(|_| true).await
     }
