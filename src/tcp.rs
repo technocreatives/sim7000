@@ -112,8 +112,10 @@ impl<'s> TcpStream<'s> {
             .run(cipstart::Connect {
                 mode: ConnectMode::Tcp,
                 number: token.ordinal(),
-                destination: host.try_into().map_err(|_| Error::BufferOverflow)?,
                 port,
+
+                #[allow(clippy::unnecessary_fallible_conversions)] // heapless string panics on from
+                destination: host.try_into().map_err(|_| Error::BufferOverflow)?,
             })
             .await?;
 

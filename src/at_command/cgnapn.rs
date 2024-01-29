@@ -39,6 +39,7 @@ impl AtParseLine for NetworkApn {
             "0" => Ok(NetworkApn { apn: None }),
             "1" => {
                 let apn = apn.trim_matches('"');
+                #[allow(clippy::unnecessary_fallible_conversions)] // heapless string panics on from
                 let apn = String::try_from(apn).map_err(|_| "APN too long")?;
                 Ok(NetworkApn { apn: Some(apn) })
             }
