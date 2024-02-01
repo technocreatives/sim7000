@@ -12,7 +12,7 @@ edition = "2021"
 rust-version = "1.75"
 
 [dependencies]
-critical-section = "0.2.7"
+critical-section = "1.1.2"
 defmt = { version = "0.3.2", optional = true }
 embassy-executor = "0.5.0"
 embassy-futures = "0.1.1"
