@@ -63,7 +63,8 @@ async fn main(spawner: Spawner) {
             tx_buffer: [0; 64],
             rx_buffer: [0; 64],
         },
-        power_pins
+        power_pins,
+        tcp_slots: 3,
     );
 
     defmt::info!("Initializing modem");
