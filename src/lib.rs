@@ -169,5 +169,5 @@ macro_rules! spawn_modem {
         $spawner:expr,
         $io_ty:ty as $io:expr,
         $power_pins:expr $(,)?
-     ) => {spawn_modem!($spawner, $io_ty as $io, $power_pins, tcp_slots: 8)};
+     ) => {::sim7000_async::spawn_modem!($spawner, $io_ty as $io, $power_pins, tcp_slots: 8)};
 }
