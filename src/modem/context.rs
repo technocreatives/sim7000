@@ -4,20 +4,21 @@ use embassy_sync::{
 };
 
 use super::{power::PowerSignal, CommandRunner, RawAtCommand};
-use crate::at_command::unsolicited::RegistrationStatus;
-use crate::slot::Slot;
-use crate::tcp::CONNECTION_SLOTS;
-use crate::StateSignal;
 use crate::{
+    at_command::unsolicited::RegistrationStatus,
     at_command::{
         unsolicited::{ConnectionMessage, GnssReport, NetworkRegistration, VoltageWarning},
         ResponseCode,
     },
+    drop::DropChannel,
+    slot::Slot,
+    tcp::TCP_RX_BUF_LEN,
+    util::Lagged,
     util::RingChannel,
+    StateSignal,
 };
-use crate::{drop::DropChannel, util::Lagged};
 
-pub type TcpRxPipe = Pipe<CriticalSectionRawMutex, 3072>;
+pub type TcpRxPipe = Pipe<CriticalSectionRawMutex, TCP_RX_BUF_LEN>;
 pub type TcpEventChannel = RingChannel<CriticalSectionRawMutex, ConnectionMessage, 8>;
 
 pub struct ModemContext {
@@ -35,14 +36,14 @@ pub struct ModemContext {
 }
 
 impl ModemContext {
-    pub const fn new() -> Self {
+    pub const fn new(tcp: TcpContext) -> Self {
         ModemContext {
             power_signal: PowerSignal::new(),
             command_lock: Mutex::new(()),
             commands: Channel::new(),
             generic_response: Channel::new(),
             drop_channel: DropChannel::new(),
-            tcp: TcpContext::new(),
+            tcp,
             registration_events: StateSignal::new(NetworkRegistration {
                 status: RegistrationStatus::Unknown,
                 lac: None,
@@ -66,7 +67,7 @@ pub struct TcpSlot {
 }
 
 pub struct TcpContext {
-    pub(crate) slots: [Slot<TcpSlot>; CONNECTION_SLOTS],
+    pub(crate) slots: &'static [Slot<TcpSlot>],
 }
 
 impl TcpSlot {
@@ -79,23 +80,10 @@ impl TcpSlot {
 }
 
 impl TcpContext {
-    pub const fn new() -> Self {
-        TcpContext {
-            slots: [
-                Slot::new(TcpSlot::new()),
-                Slot::new(TcpSlot::new()),
-                Slot::new(TcpSlot::new()),
-                Slot::new(TcpSlot::new()),
-                Slot::new(TcpSlot::new()),
-                Slot::new(TcpSlot::new()),
-                Slot::new(TcpSlot::new()),
-                Slot::new(TcpSlot::new()),
-            ],
-        }
+    pub const fn new(slots: &'static [Slot<TcpSlot>]) -> Self {
+        TcpContext { slots }
     }
-}
 
-impl TcpContext {
     pub fn claim(&self) -> Option<TcpToken> {
         self.slots.iter().enumerate().find_map(|(i, slot)| {
             let TcpSlot { rx, events } = slot.claim()?; // find an unclaimed slot
@@ -108,7 +96,7 @@ impl TcpContext {
     }
 
     pub async fn disconnect_all(&self) {
-        for slot in &self.slots {
+        for slot in self.slots {
             if slot.is_claimed() {
                 slot.peek().events.send(ConnectionMessage::Closed);
             }

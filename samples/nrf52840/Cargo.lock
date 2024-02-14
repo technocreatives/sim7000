@@ -870,7 +870,7 @@ checksum = "388a1df253eca08550bef6c72392cfe7c30914bf41df5269b68cbd6ff8f570a3"
 name = "sim7000-async"
 version = "5.0.0"
 dependencies = [
- "critical-section 0.2.8",
+ "critical-section 1.1.2",
  "defmt",
  "embassy-executor",
  "embassy-futures",

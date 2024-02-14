@@ -16,8 +16,11 @@ use crate::{
     Error,
 };
 
-/// The maximum number of parallel connections supported by the modem
-pub const CONNECTION_SLOTS: usize = 8;
+/// The maximum number of concurrent TCP connections supported by the modem.
+pub const MAX_TCP_SLOTS: usize = 8;
+
+/// The number of bytes allocated for each TCP slot receive buffer.
+pub const TCP_RX_BUF_LEN: usize = 3072;
 
 #[derive(Debug)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
@@ -39,8 +42,14 @@ impl embedded_io_async::Error for TcpError {
 
 #[derive(Debug)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
+#[non_exhaustive]
 pub enum ConnectError {
     ConnectFailed,
+
+    /// No connection slots available, the max number of open connections has been reached.
+    /// For TCP, this number is [MAX_TCP_SLOTS], and is a hard limit set by the modem.
+    NoFreeSlots,
+
     Other(crate::Error),
 
     /// The modem gave an unexpected response

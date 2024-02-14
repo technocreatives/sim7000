@@ -4,6 +4,7 @@ use crate::at_command::{httptofs::StatusCode, SimError};
 
 #[derive(Debug)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
+#[non_exhaustive]
 pub enum Error {
     InvalidUtf8,
     BufferOverflow,

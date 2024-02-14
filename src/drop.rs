@@ -25,12 +25,12 @@ use crate::at_command::{CloseConnection, SetGnssPower};
 use crate::gnss::GNSS_SLOTS;
 use crate::log;
 use crate::modem::{CommandRunnerGuard, ModemContext};
-use crate::tcp::CONNECTION_SLOTS;
+use crate::tcp::MAX_TCP_SLOTS;
 use crate::Error;
 
 /// The capacity of the drop channel.
 /// Nust be at least the number of unique objects that can be dropped.
-const DROP_CAPACITY: usize = GNSS_SLOTS + CONNECTION_SLOTS;
+const DROP_CAPACITY: usize = GNSS_SLOTS + MAX_TCP_SLOTS;
 pub type DropChannel = Channel<CriticalSectionRawMutex, DropMessage, DROP_CAPACITY>;
 
 /// Type for facilitating asynchronous dropping. See module-level docs for details.

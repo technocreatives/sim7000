@@ -466,7 +466,8 @@ impl<'c, P: ModemPower> Modem<'c, P> {
         host: &str,
         port: u16,
     ) -> Result<TcpStream<'c>, ConnectError> {
-        let tcp_context = self.context.tcp.claim().unwrap();
+        let tcp_context = self.context.tcp.claim().ok_or(ConnectError::NoFreeSlots)?;
+
         TcpStream::connect(
             tcp_context,
             host,
