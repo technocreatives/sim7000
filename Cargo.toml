@@ -27,3 +27,7 @@ log = { version = "0.4", optional = true }
 default = ["log"]
 log = ["dep:log"]
 defmt = ["dep:defmt",  "embassy-time/defmt", "heapless/defmt-impl"]
+
+[dev-dependencies]
+quickcheck = "1.0.3"
+quickcheck_macros = "1.0.0"

@@ -1,6 +1,7 @@
 use core::str::FromStr;
 
 use crate::at_command::{AtParseErr, AtParseLine};
+use crate::parse_f32;
 use crate::util::collect_array;
 
 #[derive(Debug, PartialEq)]
@@ -55,18 +56,23 @@ impl AtParseLine for GnssReport {
                 .or_else(|e| s.is_empty().then(T::default).ok_or(e))
         }
 
+        // avoid parsing f32s with FromStr implementation because it uses 10KiB extra flash
+        fn parse_optional_f32(s: &str) -> Result<f32, AtParseErr> {
+            Ok(parse_f32(s).or_else(|e| s.is_empty().then_some(0.0).ok_or(e))?)
+        }
+
         Ok(GnssReport::Fix(GnssFix {
-            latitude: latitude.parse()?,
-            longitude: longitude.parse()?,
-            altitude: msl_altitude.parse()?,
+            latitude: parse_f32(latitude)?,
+            longitude: parse_f32(longitude)?,
+            altitude: parse_f32(msl_altitude)?,
 
             // The docs are unclear on what fields are optional, so just assume everything except
             // the core values are.
-            speed_over_ground: parse_optional(speed_over_groud)?,
-            course_over_ground: parse_optional(course_over_ground)?,
-            hdop: parse_optional(hdop)?,
-            pdop: parse_optional(pdop)?,
-            vdop: parse_optional(vdop)?,
+            speed_over_ground: parse_optional_f32(speed_over_groud)?,
+            course_over_ground: parse_optional_f32(course_over_ground)?,
+            hdop: parse_optional_f32(hdop)?,
+            pdop: parse_optional_f32(pdop)?,
+            vdop: parse_optional_f32(vdop)?,
             signal_noise_ratio: parse_optional(c_n0_max)?,
 
             // The docs contradicts itself on what these values are and what they are called

@@ -1,6 +1,6 @@
 use core::{
     fmt::Debug,
-    num::{ParseFloatError, ParseIntError},
+    num::{IntErrorKind, ParseFloatError, ParseIntError},
 };
 
 pub mod generic_response;
@@ -177,6 +177,14 @@ impl AtParseLine for ResponseCode {
 impl From<&'static str> for AtParseErr {
     fn from(message: &'static str) -> Self {
         AtParseErr { message }
+    }
+}
+
+impl From<IntErrorKind> for AtParseErr {
+    fn from(_: IntErrorKind) -> Self {
+        AtParseErr {
+            message: "Failed to parse integer",
+        }
     }
 }
 
