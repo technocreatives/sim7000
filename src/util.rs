@@ -8,6 +8,8 @@ use core::{
 use embassy_sync::{blocking_mutex, blocking_mutex::raw::RawMutex, waitqueue::WakerRegistration};
 use heapless::Deque;
 
+use crate::at_command::AtParseErr;
+
 #[track_caller]
 pub(crate) fn collect_array<T: Default + Copy, const N: usize>(
     mut iter: impl Iterator<Item = T>,
@@ -17,6 +19,46 @@ pub(crate) fn collect_array<T: Default + Copy, const N: usize>(
         *item = iter.next()?
     }
     Some(out)
+}
+
+/// A naive float parsing implementation, made to be less bloated than the FromStr impl for f64s.
+///
+/// Only supports basic decimal numbers that look like `-?\d+(.\d*)?`.
+/// Does very litte sanity checking, may produce nonsensical results if given malformed strings.
+pub(crate) fn parse_f64(s: &str) -> Result<f64, &'static str> {
+    let (int, frac) = s
+        .find('.')
+        .map(|decimal_place| {
+            let (int, frac) = s.split_at(decimal_place);
+            let frac = &frac[1..];
+            let frac = frac.trim_end_matches('0');
+
+            (int, frac)
+        })
+        .unwrap_or((s, ""));
+
+    const PARSE_ERR: &str = "float parse error";
+    const OVERFLOW_ERR: &str = "float parse overflow";
+
+    let decimal_place = frac.len() as u32;
+
+    let whole: i64 = if int.is_empty() { Ok(0) } else { int.parse() }.map_err(|_| PARSE_ERR)?;
+    let frac: u64 = if frac.is_empty() { Ok(0) } else { frac.parse() }.map_err(|_| PARSE_ERR)?;
+
+    let mut frac = i64::try_from(frac).map_err(|_| OVERFLOW_ERR)?;
+    if whole.is_negative() {
+        frac = -frac;
+    }
+    let (whole, frac) = (whole as f64, frac as f64);
+
+    let pow = 10u32.pow(decimal_place) as f64;
+    let num = whole + frac / pow;
+    Ok(num)
+}
+
+/// Shorthand for [parse_f64] as `f32`.
+pub(crate) fn parse_f32(s: &str) -> Result<f32, AtParseErr> {
+    Ok(parse_f64(s)? as f32)
 }
 
 /// A signal with that keeps track of the last value signaled.
@@ -152,5 +194,36 @@ impl<M: RawMutex, T: Debug, const N: usize> RingChannel<M, T, N> {
             s.buf.clear();
             s.overflowed = false;
         });
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use core::fmt::Write;
+    use heapless::String;
+    use quickcheck_macros::quickcheck;
+
+    #[quickcheck]
+    // we use ints here because quickcheck with floats is broken
+    fn parse_f64(int: i16, frac: u16) {
+        let mut s = String::<128>::new();
+        write!(&mut s, "{int}.{frac}").expect("buffer overflow when stringifying float");
+        let s = s.trim();
+
+        let parsed = super::parse_f64(s).expect("failed to parse f64");
+        let parsed2 = s.parse().unwrap();
+        assert_eq!(parsed, parsed2);
+    }
+
+    #[quickcheck]
+    // we use ints here because quickcheck with floats is broken
+    fn parse_f32(int: i16, frac: u16) {
+        let mut s = String::<128>::new();
+        write!(&mut s, "{int}.{frac}").expect("buffer overflow when stringifying float");
+        let s = s.trim();
+
+        let parsed = super::parse_f32(s).expect("failed to parse f32");
+        let parsed2 = s.parse().unwrap();
+        assert_eq!(parsed, parsed2);
     }
 }
