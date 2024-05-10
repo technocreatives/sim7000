@@ -425,6 +425,10 @@ impl<'c, P: ModemPower> Modem<'c, P> {
         self.power_signal.broadcast(PowerState::Off);
         self.context.registration_events.signal(NET_REG_DEFAULT);
         self.context.tcp.disconnect_all().await;
+        // modem needs to be enabled for reset
+        if let PowerState::Off = self.power.state() {
+            self.power.enable().await;
+        }
         self.power.reset().await;
     }
 

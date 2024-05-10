@@ -1,7 +1,6 @@
-use core::str::FromStr;
-
 use crate::at_command::{AtParseErr, AtParseLine};
 use crate::util::collect_array;
+use core::str::FromStr;
 
 #[derive(Debug, PartialEq)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
