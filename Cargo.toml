@@ -1,6 +1,6 @@
 [package]
 name = "sim7000-async"
-version = "5.0.0"
+version = "5.0.1"
 authors = [
 	"Zoey Riordan <zoey@dos.cafe>",
 	"Joakim Hulthe <joakim@hulthe.net>",
