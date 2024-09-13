@@ -10,9 +10,56 @@ pub enum GnssReport {
     Fix(GnssFix),
 }
 
+#[derive(Default, Debug, PartialEq)]
+pub struct DateTime {
+    pub year: u16,
+    pub month: u8,
+    pub day: u8,
+    pub hour: u8,
+    pub minute: u8,
+    pub second: u8,
+}
+
+impl DateTime {
+    pub fn new(time_string: &str) -> Option<Self> {
+        let year = time_string.get(..4)?.parse().ok()?;
+        let month = time_string.get(4..6)?.parse().ok()?;
+        let day = time_string.get(6..8)?.parse().ok()?;
+        let hour = time_string.get(8..10)?.parse().ok()?;
+        let minute = time_string.get(10..12)?.parse().ok()?;
+        let second = time_string.get(12..14)?.parse().ok()?;
+
+        Some(Self {
+            year,
+            month,
+            day,
+            hour,
+            minute,
+            second,
+        })
+    }
+}
+
+#[cfg(feature = "defmt")]
+impl defmt::Format for DateTime {
+    fn format(&self, fmt: defmt::Formatter) {
+        defmt::write!(
+            fmt,
+            "{}-{}-{}T{}:{}:{}",
+            self.year,
+            self.month,
+            self.day,
+            self.hour,
+            self.minute,
+            self.second
+        )
+    }
+}
+
 #[derive(Debug, PartialEq)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct GnssFix {
+    pub date_time: DateTime,
     pub latitude: f32,
     pub longitude: f32,
     pub altitude: f32,
@@ -35,7 +82,7 @@ impl AtParseLine for GnssReport {
             return Err("Missing +UGNSINF prefix".into());
         }
 
-        let [run_status, fix_status, _utc_datetime, latitude, longitude, msl_altitude, speed_over_groud, course_over_ground, _fix_mode, _reserved1, hdop, pdop, vdop, _reserved2, sat_gps_in_view, sat_gnss_used, sat_glonass_used, _reserved3, c_n0_max, _hpa, _vpa] =
+        let [run_status, fix_status, utc_datetime, latitude, longitude, msl_altitude, speed_over_groud, course_over_ground, _fix_mode, _reserved1, hdop, pdop, vdop, _reserved2, sat_gps_in_view, sat_gnss_used, sat_glonass_used, _reserved3, c_n0_max, _hpa, _vpa] =
             collect_array(rest.split(',')).ok_or("Missing ',' separators")?;
 
         if run_status != "1" {
@@ -55,6 +102,8 @@ impl AtParseLine for GnssReport {
         }
 
         Ok(GnssReport::Fix(GnssFix {
+            date_time: DateTime::new(utc_datetime).unwrap_or_default(),
+
             latitude: latitude.parse()?,
             longitude: longitude.parse()?,
             altitude: msl_altitude.parse()?,

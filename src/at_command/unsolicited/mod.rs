@@ -50,7 +50,7 @@ pub use rdy::Ready;
 pub use receive::ReceiveHeader;
 pub use remote_ip::IncomingConnection;
 pub use sms_ready::SmsReady;
-pub use ugnsinf::{GnssFix, GnssReport};
+pub use ugnsinf::{DateTime, GnssFix, GnssReport};
 pub use voltage_warning::VoltageWarning;
 
 /// Unsolicited Response Code
