@@ -1,3 +1,4 @@
 [toolchain]
+channel = "1.79.0"
 components = ["rust-src", "clippy", "rustfmt"]
 targets = ["thumbv7em-none-eabihf"]
