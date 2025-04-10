@@ -189,3 +189,12 @@ impl<T: AtResponse, Y: AtResponse> ExpectResponse for (T, Y) {
         Ok((r1, r2))
     }
 }
+
+impl<T: AtResponse, Y: AtResponse, Z: AtResponse> ExpectResponse for (T, Y, Z) {
+    async fn expect<'a>(runner: &'a CommandRunnerGuard<'a>) -> Result<Self, Error> {
+        let r1 = runner.expect_response().await?;
+        let r2 = runner.expect_response().await?;
+        let r3 = runner.expect_response().await?;
+        Ok((r1, r2, r3))
+    }
+}

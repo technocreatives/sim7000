@@ -6,6 +6,7 @@ use core::{
 pub mod generic_response;
 pub mod unsolicited;
 
+use cmgr::SmsMessage;
 pub use generic_response::{CloseOk, GenericOk, SimError, WritePrompt};
 
 pub mod at;
@@ -33,8 +34,13 @@ pub mod cipshut;
 pub mod cipsprt;
 pub mod cipstart;
 pub mod cmee;
+pub mod cmgd;
+pub mod cmgf;
+pub mod cmgr;
+pub mod cmgs;
 pub mod cmnb;
 pub mod cnact;
+pub mod cnmi;
 pub mod cnmp;
 pub mod cntp;
 pub mod cntpcid;
@@ -42,6 +48,8 @@ pub mod cops;
 pub mod cpsi;
 pub mod creg;
 pub mod csclk;
+pub mod cscs;
+pub mod csms;
 pub mod csq;
 pub mod cstt;
 pub mod gsn;
@@ -73,6 +81,8 @@ pub use cipshut::ShutConnections;
 pub use cipsprt::SetCipSendPrompt;
 pub use cipstart::{Connect, ConnectMode};
 pub use cmee::{CMEErrorMode, ConfigureCMEErrors};
+pub use cmgf::{GetSmsMessageFormat, SetSmsMessageFormat, SmsMessageFormat};
+pub use cmgs::{MessageReference, SendSms};
 pub use cmnb::{NbMode, SetNbMode};
 pub use cnact::{CnactMode, SetAppNetwork};
 pub use cnmp::{NetworkMode, SetNetworkMode};
@@ -81,6 +91,8 @@ pub use cntpcid::SetGprsBearerProfileId;
 pub use cops::{GetOperatorInfo, OperatorFormat, OperatorInfo, OperatorMode};
 pub use cpsi::{GetSystemInfo, SystemInfo, SystemMode};
 pub use csclk::SetSlowClock;
+pub use cscs::{CharacterSet, SetTeCharacterSet};
+pub use csms::SelectMessageService;
 pub use csq::{GetSignalQuality, SignalQuality};
 pub use cstt::StartTask;
 pub use gsn::{GetImei, Imei};
@@ -139,6 +151,9 @@ pub enum ResponseCode {
     CopyResponse(CopyResponse),
     XtraStatus(XtraStatus),
     Imei(Imei),
+    SmsMessageFormat(SmsMessageFormat),
+    MessageReference(MessageReference),
+    SmsMessage(SmsMessage),
 }
 
 impl AtParseLine for ResponseCode {
@@ -170,6 +185,13 @@ impl AtParseLine for ResponseCode {
             // Imei is weird and may not be unambiguously parsed.
             // Take care if trying to implement other, similar, response codes.
             .or_else(parse(line, ResponseCode::Imei))
+            .or_else(parse(line, ResponseCode::SmsMessageFormat))
+            .or_else(parse(line, ResponseCode::MessageReference))
+            // .or_else(parse(line, ResponseCode::SmsInfo))
+            // Like the Imei, this one is weird and can't be unambiguously parsed (since it is human input), with the current setup.
+            // Anyways, let's have this at the bottom, that way we can catch any other
+            // response codes before this one.
+            .or_else(parse(line, ResponseCode::SmsMessage))
             .map_err(|_| "Unknown response code".into())
     }
 }

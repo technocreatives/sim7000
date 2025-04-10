@@ -10,7 +10,7 @@ pub enum GnssReport {
     Fix(GnssFix),
 }
 
-#[derive(Default, Debug, PartialEq)]
+#[derive(Default, Debug, Clone, PartialEq)]
 pub struct DateTime {
     pub year: u16,
     pub month: u8,

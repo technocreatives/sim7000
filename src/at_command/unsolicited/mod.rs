@@ -34,7 +34,7 @@ pub use cbm::Cbm;
 pub use cds::Cds;
 pub use cfun::CFun;
 pub use cmt::Cmt;
-pub use cmti::Cmti;
+pub use cmti::NewSmsIndex;
 pub use connection::{Connection, ConnectionMessage};
 pub use cpin::CPin;
 pub use cring::CRing;
@@ -62,7 +62,7 @@ pub enum Urc {
     Cds(Cds),
     CFun(CFun),
     Cmt(Cmt),
-    Cmti(Cmti),
+    Cmti(NewSmsIndex),
     CPin(CPin),
     CRing(CRing),
     CUsd(CUsd),
@@ -120,7 +120,6 @@ impl AtParseLine for Urc {
 
 // TODO
 //mod cdnsgip
-//mod cmti;
 //mod cmt;
 //mod cbm;
 //mod cds;

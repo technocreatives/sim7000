@@ -12,14 +12,19 @@ use crate::{
         cgnsmod::{self, WorkMode},
         cgnspwr, cgnsurc, cgreg, cifsrex, ciicr, cipmux, cipshut,
         cmee::{self, CMEErrorMode},
+        cmgd::{DeleteFlag, DeleteSms},
+        cmgr::{ReadSms, SmsMessage},
+        cmgs::{self, SendSmsMessage},
         cmnb::{self, NbMode},
+        cnmi::{SetSmsIndication, SmsIndicationMode, SmsMtMode},
         cnmp, cops,
         cpsi::{self},
         creg, csclk, csq, cstt, gsn,
         ifc::{self, FlowControl},
         ipr::{self, BaudRate},
-        unsolicited::{NetworkRegistration, RegistrationStatus},
-        At, AtRequest, BearerSettings, NetworkMode,
+        unsolicited::{NetworkRegistration, NewSmsIndex, RegistrationStatus},
+        At, AtRequest, BearerSettings, CharacterSet, NetworkMode, SelectMessageService,
+        SetSmsMessageFormat, SetTeCharacterSet, SmsMessageFormat,
     },
     gnss::Gnss,
     log,
@@ -31,6 +36,9 @@ use crate::{
 };
 pub use command::{CommandRunner, CommandRunnerGuard, RawAtCommand, AT_DEFAULT_TIMEOUT};
 pub use context::*;
+use embassy_sync::{
+    blocking_mutex::raw::CriticalSectionRawMutex, channel::Receiver, signal::Signal,
+};
 use embassy_time::{with_timeout, Duration, Timer};
 use futures::{select_biased, FutureExt};
 use heapless::{String, Vec};
@@ -148,6 +156,7 @@ impl<'c, P: ModemPower> Modem<'c, P> {
             tcp: &context.tcp,
             gnss: context.gnss_slot.peek(),
             voltage_warning: context.voltage_slot.peek(),
+            sms_indices: context.sms_indices.sender(),
         };
 
         let tx_pump = TxPump {
@@ -283,6 +292,23 @@ impl<'c, P: ModemPower> Modem<'c, P> {
             .run(cmee::ConfigureCMEErrors(CMEErrorMode::Numeric))
             .await?;
 
+        // Set up SMS stuff
+        try_retry!(
+            ("CMGF", 5, Duration::from_secs(1)),
+            commands
+                .run(SetSmsMessageFormat(SmsMessageFormat::Text))
+                .await
+        )?;
+        commands.run(SelectMessageService).await?;
+        commands.run(SetTeCharacterSet(CharacterSet::GSM)).await?;
+        commands
+            .run(SetSmsIndication {
+                mode: SmsIndicationMode::BufferWhenLinkBusy,
+                routing: SmsMtMode::Index,
+            })
+            .await?;
+        self.context.sms_state.signal(SmsState::Available);
+
         // CREG, CEREG, and CGREG are each necessary based on what network mode we're using
         // (GSM, LTE, etc). But for simplicity's sake we set up URCs for all of them. This is also
         // what Simcom recommends. These commands can fail spuriously though, so we run each in a
@@ -325,7 +351,6 @@ impl<'c, P: ModemPower> Modem<'c, P> {
         }
         log::info!("registered to network");
 
-        commands.run(cipmux::EnableMultiIpConnection(true)).await?;
         commands.run(cipshut::ShutConnections).await?;
 
         let apn = match &self.apn {
@@ -343,6 +368,7 @@ impl<'c, P: ModemPower> Modem<'c, P> {
 
         log::info!("authenticating with apn {:?}", apn);
 
+        commands.run(cipmux::EnableMultiIpConnection(true)).await?;
         commands
             .run(cstt::StartTask {
                 apn: apn.clone(),
@@ -409,6 +435,7 @@ impl<'c, P: ModemPower> Modem<'c, P> {
     }
 
     pub async fn deactivate(&mut self) {
+        self.context.sms_state.signal(SmsState::Unavailable);
         self.power_signal.broadcast(PowerState::Off);
         self.context.registration_events.signal(NET_REG_DEFAULT);
         self.context.tcp.disconnect_all().await;
@@ -463,6 +490,47 @@ impl<'c, P: ModemPower> Modem<'c, P> {
             _ = warn_on_long_wait.fuse() => unreachable!(),
             _ = Timer::after(Duration::from_secs(10 * 60)).fuse() => Err(Error::Timeout),
         }
+    }
+
+    pub async fn get_sms_stream(&mut self) -> (SmsStream<'c>, SmsSignal<'c>) {
+        let sms_indicies = self.context.sms_indices.receiver();
+        (
+            SmsStream {
+                sms_indicies,
+                commands: self.context.commands(),
+                // state: &self.context.sms_state,
+            },
+            SmsSignal {
+                inner: &self.context.sms_state,
+            },
+        )
+    }
+    pub async fn send_sms(&mut self, destination: &str, message: &str) -> Result<(), Error> {
+        let commands = self.commands.lock().await;
+        commands
+            .run(cmgs::SendSms {
+                destination: destination.into(),
+            })
+            .await?;
+        commands.run(SendSmsMessage(message.into())).await?;
+        Ok(())
+    }
+
+    pub async fn read_sms(&mut self) -> Result<SmsMessage, Error> {
+        let index =
+            with_timeout(Duration::from_secs(1), self.context.sms_indices.receive()).await?;
+        log::info!("Reading SMS at index: {:?}", index);
+
+        let commands = self.commands.lock().await;
+        let (sms, _) = commands.run(ReadSms { index: index.index }).await?;
+        if let Err(e) = commands
+            .run(DeleteSms(DeleteFlag::Index(index.index)))
+            .await
+        {
+            log::warn!("Failed to delete sms: {:?}", e);
+        };
+
+        Ok(sms)
     }
 
     pub async fn connect_tcp(
@@ -694,6 +762,76 @@ impl<'c, P: ModemPower> Modem<'c, P> {
     pub async fn wake(&mut self) {
         self.power.wake().await;
         self.power_signal.broadcast(PowerState::On);
+    }
+}
+
+pub struct SmsStream<'a> {
+    sms_indicies: Receiver<'a, CriticalSectionRawMutex, NewSmsIndex, 5>,
+    commands: CommandRunner<'a>,
+    // state: &'a Signal<CriticalSectionRawMutex, SmsState>,
+}
+
+pub struct SmsSignal<'a> {
+    inner: &'a Signal<CriticalSectionRawMutex, SmsState>,
+}
+
+impl SmsSignal<'_> {
+    pub async fn wait_for_available(&self) {
+        loop {
+            let state = self.inner.wait().await;
+            if let SmsState::Available = state {
+                return;
+            }
+        }
+    }
+
+    pub async fn wait_for_unavailable(&self) {
+        loop {
+            let state = self.inner.wait().await;
+            if let SmsState::Unavailable = state {
+                return;
+            }
+        }
+    }
+}
+
+pub(crate) enum SmsState {
+    Available,
+    Unavailable,
+}
+
+impl SmsStream<'_> {
+    pub async fn read_sms(&mut self) -> Result<SmsMessage, Error> {
+        let index = with_timeout(Duration::from_secs(1), self.sms_indicies.receive()).await?;
+        log::info!("Reading SMS at index: {:?}", index);
+
+        let commands = self.commands.lock().await;
+        let (sms, _) = commands.run(ReadSms { index: index.index }).await?;
+
+        if index.index > 8 {
+            // avoid filling up the sms storage with old messages that for some reason wasn't deleted
+            let _ = commands.run(DeleteSms(DeleteFlag::All)).await;
+        } else {
+            let _ = commands
+                .run(DeleteSms(DeleteFlag::Index(index.index)))
+                .await;
+        }
+
+        Ok(sms)
+    }
+
+    pub async fn send_sms(&mut self, destination: &str, message: &str) -> Result<(), Error> {
+        let mut commands = self.commands.lock().await;
+        commands
+            .run_with_timeout(
+                Some(Duration::from_secs(10)),
+                cmgs::SendSms {
+                    destination: destination.into(),
+                },
+            )
+            .await?;
+        commands.run(SendSmsMessage(message.into())).await?;
+        Ok(())
     }
 }
 

@@ -1,4 +1,7 @@
-use crate::{modem::power::PowerSignalListener, BuildIo, PowerState, SplitIo, StateSignal};
+use crate::{
+    at_command::unsolicited::NewSmsIndex, modem::power::PowerSignalListener, BuildIo, PowerState,
+    SplitIo, StateSignal,
+};
 use core::{future::Future, str::from_utf8};
 use embassy_futures::select::{select3, Either3};
 use embassy_sync::{
@@ -39,6 +42,7 @@ pub struct RxPump<'context> {
     pub(crate) voltage_warning: &'context Signal<CriticalSectionRawMutex, VoltageWarning>,
     pub(crate) registration_events:
         &'context StateSignal<CriticalSectionRawMutex, NetworkRegistration>,
+    pub(crate) sms_indices: Sender<'context, CriticalSectionRawMutex, NewSmsIndex, 5>,
 }
 
 impl<'context> Pump for RxPump<'context> {
@@ -81,6 +85,11 @@ impl<'context> Pump for RxPump<'context> {
                     }
                     log::debug!("Done sending to tcp connection {}", connection);
                 }
+                Urc::Cmti(message) => {
+                    if let Err(e) = self.sms_indices.try_send(message) {
+                        log::error!("Failed to send SMS index: {:?}", e);
+                    }
+                }
                 Urc::ConnectionMessage(message) => {
                     let slot = &self.tcp.slots[message.index];
                     slot.peek().events.send(message.message);
@@ -99,8 +108,22 @@ impl<'context> Pump for RxPump<'context> {
                 }
                 _ => log::warn!("Unhandled URC: {:?}", message),
             }
-        } else if let Ok(response) = ResponseCode::from_line(&line) {
+        } else if let Ok(mut response) = ResponseCode::from_line(&line) {
             // If it's not a URC, try to parse it as a regular response code
+
+            // Sms messages are a bit of a special case,
+            // first comes the info and then the message on a new line
+            // and a sms message can't be unambiguously parsed seperatly
+            if let ResponseCode::SmsMessage(sms) = &mut response {
+                log::info!("Got SMS from: {:?}, reading message", sms.sender);
+                let line = self.reader.read_line().await?;
+
+                if line.is_empty() {
+                    log::warn!("received empty line from modem");
+                }
+
+                sms.message = line[..line.len()].into();
+            }
 
             log::debug!("Got generic response: {:?}", line.as_str());
             if with_timeout(

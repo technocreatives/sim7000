@@ -3,18 +3,19 @@ use embassy_sync::{
     signal::Signal,
 };
 
-use super::{power::PowerSignal, CommandRunner, RawAtCommand};
+use super::{power::PowerSignal, CommandRunner, RawAtCommand, SmsState};
 use crate::{
-    at_command::unsolicited::RegistrationStatus,
     at_command::{
-        unsolicited::{ConnectionMessage, GnssReport, NetworkRegistration, VoltageWarning},
+        unsolicited::{
+            ConnectionMessage, GnssReport, NetworkRegistration, NewSmsIndex, RegistrationStatus,
+            VoltageWarning,
+        },
         ResponseCode,
     },
     drop::DropChannel,
     slot::Slot,
     tcp::TCP_RX_BUF_LEN,
-    util::Lagged,
-    util::RingChannel,
+    util::{Lagged, RingChannel},
     StateSignal,
 };
 
@@ -28,6 +29,8 @@ pub struct ModemContext {
     pub(crate) generic_response: Channel<CriticalSectionRawMutex, ResponseCode, 1>,
     pub(crate) drop_channel: DropChannel,
     pub(crate) tcp: TcpContext,
+    pub(crate) sms_indices: Channel<CriticalSectionRawMutex, NewSmsIndex, 5>,
+    pub(crate) sms_state: Signal<CriticalSectionRawMutex, SmsState>,
     pub(crate) registration_events: StateSignal<CriticalSectionRawMutex, NetworkRegistration>,
     pub(crate) gnss_slot: Slot<Signal<CriticalSectionRawMutex, GnssReport>>,
     pub(crate) voltage_slot: Slot<Signal<CriticalSectionRawMutex, VoltageWarning>>,
@@ -44,6 +47,8 @@ impl ModemContext {
             generic_response: Channel::new(),
             drop_channel: DropChannel::new(),
             tcp,
+            sms_indices: Channel::new(),
+            sms_state: Signal::new(),
             registration_events: StateSignal::new(NetworkRegistration {
                 status: RegistrationStatus::Unknown,
                 lac: None,
