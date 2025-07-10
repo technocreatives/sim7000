@@ -13,6 +13,7 @@ pub mod at;
 pub mod ate;
 pub mod cbatchk;
 pub mod ccid;
+pub mod cclk;
 pub mod cedrxs;
 pub mod cereg;
 pub mod cfgri;
@@ -101,6 +102,8 @@ pub use ifc::{FlowControl, SetFlowControl};
 pub use ipr::{BaudRate, SetBaudRate};
 pub use sapbr::{BearerSettings, CmdType, ConParamType};
 
+use crate::at_command::cclk::CclkTime;
+
 use self::{
     cgnscold::XtraStatus, cgnscpy::CopyResponse, cntp::NetworkTime, httptofs::DownloadInfo,
 };
@@ -154,6 +157,7 @@ pub enum ResponseCode {
     SmsMessageFormat(SmsMessageFormat),
     MessageReference(MessageReference),
     SmsMessage(SmsMessage),
+    CclkTime(CclkTime),
 }
 
 impl AtParseLine for ResponseCode {
@@ -182,6 +186,7 @@ impl AtParseLine for ResponseCode {
             .or_else(parse(line, ResponseCode::DownloadInfo))
             .or_else(parse(line, ResponseCode::CopyResponse))
             .or_else(parse(line, ResponseCode::XtraStatus))
+            .or_else(parse(line, ResponseCode::CclkTime))
             // Imei is weird and may not be unambiguously parsed.
             // Take care if trying to implement other, similar, response codes.
             .or_else(parse(line, ResponseCode::Imei))
