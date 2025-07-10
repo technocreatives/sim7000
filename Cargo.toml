@@ -1,6 +1,6 @@
 [package]
 name = "sim7000-async"
-version = "6.0.0"
+version = "6.1.0"
 authors = ["Zoey Riordan <zoey@dos.cafe>", "Joakim Hulthe <joakim@hulthe.net>"]
 description = "Drivers for the SIM7000 series of chips"
 license = "Apache-2.0 OR MIT"
