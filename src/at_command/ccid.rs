@@ -37,7 +37,7 @@ impl AtParseLine for Iccid {
 
         let country = line[2..4].parse()?;
         let issuer = line[4..6].parse()?;
-        let account = line[6..19].parse()?;
+        let account = line[6..20].parse()?;
 
         // TODO: this seems incorrect, but the ICCID standard scares me
         let _checksum: u8 = u8::from_str_radix(&line[18..19], 16)?;
