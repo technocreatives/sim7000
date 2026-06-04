@@ -255,6 +255,45 @@ impl<'c, P: ModemPower> Modem<'c, P> {
         Ok(())
     }
 
+    pub async fn init_for_gnss(&mut self) -> Result<(), Error> {
+        log::info!("initializing modem for gnss");
+
+        self.deactivate().await;
+        with_timeout(MODEM_POWER_TIMEOUT, self.power.enable()).await?;
+        self.power_signal.broadcast(PowerState::On);
+
+        let commands = self.commands.lock().await;
+
+        let set_flow_control = ifc::SetFlowControl {
+            dce_by_dte: FlowControl::Hardware,
+            dte_by_dce: FlowControl::Hardware,
+        };
+
+        for _ in 0..5 {
+            if let Ok(Ok(_)) = with_timeout(Duration::from_millis(2000), async {
+                commands.run(set_flow_control).await
+            })
+            .await
+            {
+                break;
+            }
+        }
+        commands.run(csclk::SetSlowClock(true)).await?;
+        commands.run(At).await?;
+        commands.run(ipr::SetBaudRate(BaudRate::Hz115200)).await?;
+        commands.run(set_flow_control).await?;
+        commands
+            .run(cmee::ConfigureCMEErrors(CMEErrorMode::Numeric))
+            .await?;
+
+        drop(commands);
+
+        log::info!("modem successfully initialized for gnss, turning it back off...");
+        self.deactivate().await;
+
+        Ok(())
+    }
+
     pub fn set_apn(&mut self, apn: heapless::String<63>) {
         self.apn = Some(apn);
     }
@@ -385,6 +424,34 @@ impl<'c, P: ModemPower> Modem<'c, P> {
         let (_ip, _) = commands.run(cifsrex::GetLocalIpExt).await?;
 
         log::info!("modem successfully activated");
+        Ok(())
+    }
+
+    pub async fn activate_for_gnss(&mut self) -> Result<(), Error> {
+        log::info!("activating modem");
+        self.power_signal.broadcast(PowerState::On);
+        with_timeout(MODEM_POWER_TIMEOUT, self.power.enable()).await?;
+        let set_flow_control = ifc::SetFlowControl {
+            dce_by_dte: FlowControl::Hardware,
+            dte_by_dce: FlowControl::Hardware,
+        };
+
+        let commands = self.commands.lock().await;
+
+        for _ in 0..5 {
+            if let Ok(Ok(_)) = with_timeout(Duration::from_millis(2000), async {
+                commands.run(set_flow_control).await
+            })
+            .await
+            {
+                break;
+            }
+        }
+        commands.run(ate::SetEcho(false)).await?;
+        commands
+            .run(cmee::ConfigureCMEErrors(CMEErrorMode::Numeric))
+            .await?;
+
         Ok(())
     }
 
