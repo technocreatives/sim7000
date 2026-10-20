@@ -136,6 +136,14 @@ mod test {
         let gnss = GnssReport::from_line(gnss_str).expect("Parse GnssReport");
 
         let expected = GnssReport::Fix(GnssFix {
+            date_time: DateTime {
+                year: 2017,
+                month: 11,
+                day: 3,
+                hour: 2,
+                minute: 26,
+                second: 32,
+            },
             latitude: 31.222067,
             longitude: 121.354368,
             altitude: 34.7,
@@ -160,6 +168,14 @@ mod test {
         let gnss = GnssReport::from_line(gnss_str).expect("Parse GnssReport");
 
         let expected = GnssReport::Fix(GnssFix {
+            date_time: DateTime {
+                year: 2022,
+                month: 1,
+                day: 26,
+                hour: 14,
+                minute: 9,
+                second: 44,
+            },
             latitude: 57.715185,
             longitude: 11.973960,
             altitude: 44.6,

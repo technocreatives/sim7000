@@ -86,8 +86,8 @@ impl<'context> Pump for RxPump<'context> {
                     log::debug!("Done sending to tcp connection {}", connection);
                 }
                 Urc::Cmti(message) => {
-                    if let Err(e) = self.sms_indices.try_send(message) {
-                        log::error!("Failed to send SMS index: {:?}", e);
+                    if self.sms_indices.try_send(message).is_err() {
+                        log::error!("Failed to send SMS index, channel is full");
                     }
                 }
                 Urc::ConnectionMessage(message) => {

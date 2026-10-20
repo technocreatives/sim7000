@@ -89,7 +89,10 @@ pub use cnact::{CnactMode, SetAppNetwork};
 pub use cnmp::{NetworkMode, SetNetworkMode};
 pub use cntp::{Execute, SynchronizeNetworkTime};
 pub use cntpcid::SetGprsBearerProfileId;
-pub use cops::{GetOperatorInfo, OperatorFormat, OperatorInfo, OperatorMode};
+pub use cops::{
+    GetOperatorInfo, OperatorFormat, OperatorInfo, OperatorMode, SetAutomaticOperator,
+    SetManualOperator,
+};
 pub use cpsi::{GetSystemInfo, SystemInfo, SystemMode};
 pub use csclk::SetSlowClock;
 pub use cscs::{CharacterSet, SetTeCharacterSet};

@@ -63,9 +63,16 @@ pub struct Modem<'c, P> {
     current_network_priority: Vec<RadioAccessTechnology, 3>,
     /// Time given to each RAT before trying the next
     auto_reg_timeout: Duration,
+    /// Numeric PLMNs the modem is allowed to register on. Empty means automatic operator selection.
+    operator_lock: &'static [&'static str],
 }
 
 const MODEM_POWER_TIMEOUT: Duration = Duration::from_secs(30);
+/// Manual operator selection blocks until the modem has searched for the network.
+const SET_OPERATOR_TIMEOUT: Duration = Duration::from_secs(180);
+/// Max response time of AT+COPS? is 120 seconds.
+const QUERY_OPERATOR_TIMEOUT: Duration = Duration::from_secs(121);
+const REGISTRATION_TIMEOUT: Duration = Duration::from_secs(10 * 60);
 const NET_REG_DEFAULT: NetworkRegistration = NetworkRegistration {
     status: RegistrationStatus::NotRegistered,
     lac: None,
@@ -139,6 +146,7 @@ impl<'c, P: ModemPower> Modem<'c, P> {
             .into_iter()
             .collect(),
             auto_reg_timeout: Duration::from_secs(2 * 60),
+            operator_lock: &[],
         };
 
         let io_pump = RawIoPump {
@@ -298,12 +306,26 @@ impl<'c, P: ModemPower> Modem<'c, P> {
         self.apn = Some(apn);
     }
 
+    /// The APN in use, either set by [Modem::set_apn] or suggested by the network on activation.
+    pub fn apn(&self) -> Option<&str> {
+        self.apn.as_deref()
+    }
+
     pub fn set_ap_username(&mut self, ap_username: &'static str) {
         self.ap_username = ap_username;
     }
 
     pub fn set_ap_password(&mut self, ap_password: &'static str) {
         self.ap_password = ap_password;
+    }
+
+    /// Only allow the modem to register on the given operators, as numeric PLMNs (MCC + MNC, e.g. "64304").
+    ///
+    /// On [Modem::activate] each operator is manually selected in order until registration succeeds.
+    /// The modem never falls back to automatic operator selection, so it will not roam onto other networks.
+    /// An empty slice (the default) means automatic operator selection.
+    pub fn set_operator_lock(&mut self, plmns: &'static [&'static str]) {
+        self.operator_lock = plmns;
     }
 
     pub async fn activate(&mut self) -> Result<(), Error> {
@@ -371,8 +393,12 @@ impl<'c, P: ModemPower> Modem<'c, P> {
                 .await
         )?;
 
+        if self.operator_lock.is_empty() {
+            self.reset_operator_selection(&mut commands).await;
+        }
+
         if self.automatic_registration {
-            let active_mode = self.automatic_registration(&commands).await?;
+            let active_mode = self.automatic_registration(&mut commands).await?;
 
             // re-order the priority list
             if let Some(index) = self
@@ -385,8 +411,8 @@ impl<'c, P: ModemPower> Modem<'c, P> {
                     .insert(0, element)
                     .expect("we just removed an element");
             }
-        } else {
-            self.wait_for_registration().await?;
+        } else if !self.register(&mut commands, REGISTRATION_TIMEOUT).await {
+            return Err(Error::Timeout);
         }
         log::info!("registered to network");
 
@@ -468,7 +494,7 @@ impl<'c, P: ModemPower> Modem<'c, P> {
     /// Returns which technology ends up being used, or a timeout error
     async fn automatic_registration(
         &self,
-        commands: &CommandRunnerGuard<'_>,
+        commands: &mut CommandRunnerGuard<'_>,
     ) -> Result<RadioAccessTechnology, Error> {
         for mode in &self.current_network_priority {
             match mode {
@@ -486,19 +512,78 @@ impl<'c, P: ModemPower> Modem<'c, P> {
             }
 
             log::info!("Trying {:?}...", mode);
-            match with_timeout(self.auto_reg_timeout, self.wait_for_registration()).await {
-                Ok(Ok(_)) => {
-                    log::info!("Registered using {:?}", mode);
-                    return Ok(*mode);
-                }
-                Ok(Err(_)) => {
-                    // this should never happen since wait_for_registration timeout is longer than 2 min
-                }
-                Err(_) => {}
+            if self.register(commands, self.auto_reg_timeout).await {
+                log::info!("Registered using {:?}", mode);
+                return Ok(*mode);
             }
         }
 
         Err(Error::Timeout)
+    }
+
+    /// Switch the modem back to automatic operator selection if it is set to anything else.
+    ///
+    /// The operator selection is saved in the modem's NVRAM, so a lock set by [Modem::set_operator_lock]
+    /// (possibly by a previous firmware) would otherwise keep the modem from registering on any other network.
+    async fn reset_operator_selection(&self, commands: &mut CommandRunnerGuard<'_>) {
+        let info = match commands
+            .run_with_timeout(Some(QUERY_OPERATOR_TIMEOUT), cops::GetOperatorInfo)
+            .await
+        {
+            Ok((info, _)) => info,
+            Err(e) => {
+                log::warn!("Failed to query operator selection: {:?}", e);
+                return;
+            }
+        };
+
+        if matches!(info.mode, cops::OperatorMode::Automatic) {
+            return;
+        }
+
+        log::info!(
+            "Operator selection is {:?}, resetting to automatic",
+            info.mode
+        );
+        if let Err(e) = commands
+            .run_with_timeout(Some(SET_OPERATOR_TIMEOUT), cops::SetAutomaticOperator)
+            .await
+        {
+            log::warn!("Failed to reset operator selection: {:?}", e);
+        }
+    }
+
+    /// Wait for the modem to register to a network, respecting the operator lock if one is set.
+    ///
+    /// With an operator lock, each operator is selected in turn and given `timeout` to register.
+    ///
+    /// Returns whether registration succeeded.
+    async fn register(&self, commands: &mut CommandRunnerGuard<'_>, timeout: Duration) -> bool {
+        if self.operator_lock.is_empty() {
+            return matches!(
+                with_timeout(timeout, self.wait_for_registration()).await,
+                Ok(Ok(()))
+            );
+        }
+
+        for &plmn in self.operator_lock {
+            log::info!("Selecting operator {}...", plmn);
+            let select = cops::SetManualOperator { plmn: plmn.into() };
+            if let Err(e) = commands
+                .run_with_timeout(Some(SET_OPERATOR_TIMEOUT), select)
+                .await
+            {
+                log::warn!("Failed to select operator {}: {:?}", plmn, e);
+                continue;
+            }
+
+            if let Ok(Ok(())) = with_timeout(timeout, self.wait_for_registration()).await {
+                log::info!("Registered on operator {}", plmn);
+                return true;
+            }
+        }
+
+        false
     }
 
     pub async fn deactivate(&mut self) {
@@ -797,8 +882,7 @@ impl<'c, P: ModemPower> Modem<'c, P> {
     ///
     /// This command can take up to 120 seconds to run.
     pub async fn query_operator_info(&mut self) -> Result<cops::OperatorInfo, Error> {
-        // max response time is 120 seconds
-        self.run_command_with_timeout(Some(Duration::from_secs(121)), cops::GetOperatorInfo)
+        self.run_command_with_timeout(Some(QUERY_OPERATOR_TIMEOUT), cops::GetOperatorInfo)
             .await
             .map(|(response, _)| response)
     }
